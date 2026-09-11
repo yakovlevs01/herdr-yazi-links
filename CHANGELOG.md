@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Remove all receiver system notifications. Byte progress and errors remain in the receiver log and remote status.
+
+
 ## 0.3.0
 
 - Send selected or hovered remote Yazi files to local ripdrag with Ctrl+G.

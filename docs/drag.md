@@ -48,7 +48,7 @@ Only regular files are supported remotely. Selecting a directory, a final symbol
 
 Each batch downloads to a private `.partial-*` directory, then becomes a `transfer-*` directory only after every file succeeds. Indexed subdirectories preserve identical basenames. UTF-8, spaces, quotes, newlines and shell punctuation are supported. Non-UTF-8 names are rejected. Originals are never deleted or synchronized back. A normal transfer failure removes the incomplete batch; an abrupt process or machine crash can leave a `.partial-*` directory, which is never handed to ripdrag.
 
-Yazi shows request acceptance or connection errors. The local desktop shows progress and failures when `notify-send` is available. Full byte progress and ripdrag errors are in `~/.cache/herdr-yazi-drag/receiver.log`. On the server:
+Yazi shows request acceptance or connection errors. The receiver sends no system notifications. Full byte progress and ripdrag errors are in `~/.cache/herdr-yazi-drag/receiver.log`. On the server:
 
 ```sh
 python3 ~/pets/herdr-yazi-links/drag.py status yazi-links

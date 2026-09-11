@@ -48,16 +48,6 @@ def main():
             feedback({'message': message, 'level': level, 'id': job})
         except (OSError, ValueError):
             pass
-    def notify(message, percent=None):
-        if shutil.which('notify-send'):
-            options = ['-h', 'string:x-canonical-private-synchronous:herdr-drag']
-            if percent is not None:
-                options += ['-h', 'int:value:' + str(percent)]
-            try:
-                subprocess.run(['notify-send', *options, 'Herdr drag', message], stdin=subprocess.DEVNULL,
-                               stdout=log, stderr=log, timeout=3)
-            except (OSError, subprocess.TimeoutExpired):
-                pass
     def heartbeat():
         while not stop.wait(2):
             windows[:] = [window for window in windows if window.poll() is None]
@@ -75,14 +65,12 @@ def main():
                 continue
             try:
                 report('Downloading ' + str(len(job['paths'])) + ' file(s)', job=job['id'])
-                notify('Downloading ' + str(len(job['paths'])) + ' file(s)')
                 last_progress = [0.0]
                 def progress(path, done, total):
                     if stop.is_set():
                         raise RuntimeError('Receiver disconnected; download cancelled')
                     if time.monotonic() - last_progress[0] >= 2 or done == total:
                         report(f'{path}: {done}/{total} bytes', job=job['id'])
-                        notify(f'{Path(path).name}: {done}/{total} bytes', int(done * 100 / total) if total else 100)
                         last_progress[0] = time.monotonic()
                 files = download(args.host, job['paths'], cache, progress)
                 if stop.is_set():
@@ -95,10 +83,8 @@ def main():
                 if window.poll() not in (None, 0):
                     raise RuntimeError('ripdrag exited with code ' + str(window.returncode))
                 report('Opened ripdrag: ' + str(files[0].parent.parent), job=job['id'])
-                notify('Files ready in ripdrag')
             except Exception as error:
                 report(str(error), 'error', job['id'])
-                notify('Transfer failed: ' + str(error))
     try:
         ready, _, _ = select.select([ssh.stdout], [], [], 20)
         if not ready:
@@ -125,7 +111,6 @@ def main():
                 jobs.put_nowait(job)
             except queue.Full:
                 report('Queue full; request rejected', 'error', job['id'])
-                notify('Transfer queue full; retry Ctrl+G later')
         raise RuntimeError('Receiver SSH connection closed. Reconnect Herdr to restore drag.')
     finally:
         stop.set()
