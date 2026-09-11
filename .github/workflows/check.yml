@@ -1,9 +1,14 @@
 name: Plugin checks
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '21 7 * * 1'
 permissions:
   contents: read
 jobs:
-  plugin:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,3 +17,35 @@ jobs:
           python-version: '3.12'
       - run: python3 -m unittest discover -s tests -v
       - run: bash -n build.sh && sh -n herdr-yazi
+  stock-herdr:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        herdr: ['v0.9.0', 'latest']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Download official Herdr and Yazi releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HERDR_VERSION: ${{ matrix.herdr }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/yazi-tools"
+          if [ "$HERDR_VERSION" = latest ]; then
+            HERDR_VERSION=$(gh api repos/herdrdev/herdr/releases/latest --jq .tag_name)
+          fi
+          YAZI_VERSION=$(gh api repos/sxyazi/yazi/releases/latest --jq .tag_name)
+          echo "Testing Herdr $HERDR_VERSION with Yazi $YAZI_VERSION"
+          gh release download "$HERDR_VERSION" --repo herdrdev/herdr --pattern herdr-linux-x86_64 --dir "$RUNNER_TEMP/yazi-tools"
+          gh release download "$YAZI_VERSION" --repo sxyazi/yazi --pattern yazi-x86_64-unknown-linux-musl.zip --dir "$RUNNER_TEMP/yazi-tools"
+          cd "$RUNNER_TEMP/yazi-tools"
+          unzip -q yazi-x86_64-unknown-linux-musl.zip
+          chmod +x herdr-linux-x86_64
+          echo "$RUNNER_TEMP/yazi-tools" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/yazi-tools/yazi-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+      - name: Real terminal click and Yazi smoke test
+        run: python3 scripts/smoke.py --herdr herdr-linux-x86_64

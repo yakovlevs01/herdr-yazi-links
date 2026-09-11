@@ -19,3 +19,9 @@ no additional plugin invocation.
 This validates Herdr hyperlink dispatch and the plugin launch. It does not
 validate whether a particular agent harness converts Markdown file links into
 OSC 8 hyperlinks. Remote sessions and macOS were not tested.
+
+## Repeatable checks
+
+Run `python3 -m unittest discover -s tests -v` for URI, argument passing and atomic build safety checks. Run `python3 scripts/smoke.py --herdr /usr/bin/herdr` for stock Herdr, or pass `--expect-paths` with the patched executable. These Linux checks send real SGR Ctrl-click events through a PTY and verify the selected file in real Yazi, without an agent. Configurations and sessions are isolated.
+
+GitHub Actions checks stock 0.9.0 and the latest release on changes and weekly. `scripts/check-upstream.py --revision FULL_COMMIT` builds and tests a separate patched candidate before adoption. See the bilingual guides in `docs/`.

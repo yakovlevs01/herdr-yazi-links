@@ -1,109 +1,55 @@
 # herdr-yazi-links
 
-Open a file in Yazi with Ctrl-click inside Herdr. Yazi opens beside the source
-pane and selects the file. Press `q` to close Yazi.
+Ctrl-click a file hyperlink in Herdr to open Yazi beside the source pane, with the file selected. Press `q` to close Yazi.
 
-This is a community plugin, not an official Herdr component. [Русский](README.ru.md).
+[Русский](README.ru.md) · [Plugin installation](docs/plugin.md) · [Optional patched Herdr](docs/patched-herdr.md)
 
-## Two modes
+## Choose what you need
 
-| Input | Requirements |
-|---|---|
-| OSC 8 `file://` hyperlink | Plugin and a Herdr version that dispatches file hyperlinks to plugins |
-| Plain-text `src/main.rs` or `README.md` | Plugin **and the optional Herdr patch** in this repository |
+| Mode | Clickable input | Installation |
+|---|---|---|
+| Plugin on stock Herdr | A terminal OSC 8 hyperlink targeting `file:///absolute/path` | Install the plugin |
+| Plugin with optional Herdr patch | The same hyperlinks, plus existing plain-text paths such as `README.md`, `src/main.rs` and `/home/user/report.txt` | Install the plugin and build the patched Herdr |
 
-Installing the plugin alone does not make plain-text paths clickable. The
-patched build was tested on Linux with Herdr 0.9.0 at the revision recorded in
-[patches/upstream.toml](patches/upstream.toml). The plugin-only mode was also verified on the unmodified system Herdr 0.9.0:
-Ctrl-click on an OSC 8 file hyperlink opened Yazi with the target selected;
-Ctrl-click on a plain filename did not invoke the plugin. macOS, remote sessions
-and Markdown-to-OSC-8 conversion in agent harnesses remain untested.
+The manifest at the repository root installs the plugin. It does not build, download or replace Herdr. The optional patch and build tools live alongside it for users who want to click ordinary paths in agent messages and command output.
 
 ## Install the plugin
 
-Clone this repository, then run:
+With Python 3 and Yazi available in the Herdr server's PATH:
+
+```sh
+herdr plugin install yakovlevs01/herdr-yazi-links
+```
+
+For a local checkout:
 
 ```sh
 herdr plugin link /absolute/path/to/herdr-yazi-links
 ```
 
-Requirements: Herdr 0.9.0 or newer with a compatible plugin API, Python 3 and
-Yazi in the **Herdr server's** PATH. The manifest minimum is an API requirement,
-not a promise that all future Herdr versions have been tested.
+See the [standalone plugin README](docs/plugin.md) for link syntax, a demo and troubleshooting. A Markdown code span such as `README.md` is ordinary text and requires the optional patch. A Markdown link works only when the application renders it as a terminal hyperlink.
 
-## Enable plain-text paths
+## Compatibility and checks
 
-Install Rust 1.98.1, Zig 0.16.0, Python 3.11+, Git and Bash 4+. From this repository:
+Plugin-only mode has been verified on unmodified Linux Herdr 0.9.0. The optional patch targets the exact revision in [patches/upstream.toml](patches/upstream.toml). macOS, `--remote` and individual agent applications' Markdown rendering have not been verified. The manifest's minimum Herdr version does not guarantee compatibility with every later version.
 
-```sh
-./build.sh
-# Or: ZIG=/absolute/path/to/zig ./build.sh
-./herdr-yazi
-```
-
-The launcher registers the plugin and starts a separate `yazi-links` session.
-It does not replace the system Herdr or restart existing sessions. Source and
-binary output live in ignored `.build/` storage.
-
-Run `printf '%s\n' README.md` in a pane whose working directory is this
-repository, then Ctrl-click the filename. No agent instructions or special
-Markdown are necessary. Optional launcher installation:
-
-```sh
-mkdir -p ~/.local/bin
-ln -s "$PWD/herdr-yazi" ~/.local/bin/herdr-yazi
-```
-
-## Recognition and limits
-
-- Absolute paths, `./file`, `../file`, `src/file.rs` and bare filenames work when
-  they refer to an existing regular file or directory.
-- Relative paths use the source pane's process working directory. A same-named
-  file in that directory can be opened even if the author meant another project.
-- Terminal hyperlinks take priority. Plain HTTP(S) URLs keep their existing behavior.
-- Unicode and soft-wrapped lines use Herdr's existing terminal-cell mapping.
-- Quoted paths containing `/` can include spaces. Unquoted spaces and
-  `:line:column` suffixes are not supported.
-- File existence is checked on a click, never during rendering.
-- Filenames are passed through environment variables and argv, never evaluated
-  as shell code. Launch errors appear in `herdr plugin log list --plugin local.yazi-links`.
-
-Yazi runs on the server owning the clicked pane. This leaves room for
-`--remote`, but the patch and plugin must be installed there too. Remote
-operation is not tested or deployed by the launcher. A nested manual SSH session
-is not detected. Remote Yazi does not provide local RipDrag.
-
-## Versioning and upstream updates
-
-The plugin version is in `herdr-plugin.toml`; changes go in [CHANGELOG.md](CHANGELOG.md).
-Release tags use `vMAJOR.MINOR.PATCH`.
-
-Keep the plugin and small patch together. Do not commit Herdr sources, caches or
-binaries. `patches/upstream.toml` records the exact source revision and toolchain;
-`patches/herdr-path-click.patch` records the change.
-
-Update the pin and patch together, run tests, build a candidate, and verify
-Ctrl-click in an isolated session. Patch failure must stop the upgrade: do not
-apply with fuzzy matching or silently fall back to an unpatched binary.
-`build.sh` checks the pin, runs tests and replaces the executable atomically only
-after a successful build. Running servers keep their old executable until
-explicitly restarted. Arbitrary upstream changes are not guaranteed compatible.
+Run these commands from the checkout:
 
 ```sh
 python3 -m unittest discover -s tests -v
+python3 scripts/smoke.py --herdr /usr/bin/herdr
+python3 scripts/smoke.py --herdr .build/bin/herdr --expect-paths
 ```
 
-## Marketplace publication
+The smoke checks exercise the terminal click route in an isolated test session without an agent. They use real Yazi and verify the selected file. GitHub Actions checks stock Herdr 0.9.0 and the latest release on changes and weekly. A manual check still helps verify your terminal’s mouse handling. For a manual demo inside Herdr, run `python3 scripts/demo.py` and Ctrl-click its examples.
 
-Publish a public GitHub repository with the manifest on its default branch and
-add the topic `herdr-plugin`. Herdr indexes eligible repositories automatically;
-a listing is not review or endorsement. Forks are excluded, so this plugin has
-its own repository rather than being a fork of Herdr. Users can install with
-`herdr plugin install OWNER/REPO`.
+Updating `/usr/bin/herdr` leaves the custom `.build/bin/herdr` unchanged. `herdr-yazi` continues to launch the pinned custom build, so new upstream features and fixes require an explicit rebuild. See the [update procedure](docs/patched-herdr.md).
 
-Keep the two-mode limitation in the description and release notes. Publishing
-the plugin does not distribute or install the patched binary.
-See [Herdr's marketplace documentation](https://herdr.dev/docs/marketplace/).
+## Publish and version
+
+This repository can be published as a community plugin. Keep `herdr-plugin.toml` at the root of the default branch of a public GitHub repository and add the `herdr-plugin` topic. The marketplace indexes eligible repositories automatically; a listing is not a review or endorsement. Forks are excluded. See [Herdr's marketplace rules](https://herdr.dev/docs/marketplace/).
+
+Before a release, run the tests, update the manifest version and [CHANGELOG.md](CHANGELOG.md), then create a matching `vMAJOR.MINOR.PATCH` tag. Describe plugin compatibility separately from the optional patch's pinned revision. Do not commit Herdr sources, caches or binaries; `.build/` is ignored.
 
 ## License
 
