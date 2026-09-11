@@ -1,4 +1,5 @@
---- @since 26.5.6
+--- @since 26.8.15
+--- @sync entry
 
 local helper = "@HERDR_DRAG_HELPER@"
 
@@ -22,7 +23,7 @@ end
 local begin = ya.sync(function(state, id, value)
 	state.jobs = state.jobs or {}
 	for key, job in pairs(state.jobs) do
-		if job.state == "done" or job.state == "error" then state.jobs[key] = nil end
+		if job.state == "done" or job.state == "error" or job.state == "cancelled" then state.jobs[key] = nil end
 	end
 	state.sequence = (state.sequence or 0) + 1
 	value.sequence = state.sequence
@@ -58,10 +59,10 @@ end
 local function status_text(state, width)
 	local active, chosen = 0, nil
 	for _, job in pairs(state.jobs or {}) do
-		local running = job.state ~= "done" and job.state ~= "error"
+		local running = job.state ~= "done" and job.state ~= "error" and job.state ~= "cancelled"
 		if running then active = active + 1 end
-		if not chosen or (running and (chosen.state == "done" or chosen.state == "error"))
-			or (running == (chosen.state ~= "done" and chosen.state ~= "error") and job.sequence < chosen.sequence) then
+		if not chosen or (running and (chosen.state == "done" or chosen.state == "error" or chosen.state == "cancelled"))
+			or (running == (chosen.state ~= "done" and chosen.state ~= "error" and chosen.state ~= "cancelled") and job.sequence < chosen.sequence) then
 			chosen = job
 		end
 	end
@@ -71,6 +72,8 @@ local function status_text(state, width)
 		text, color = "Drag error: " .. clean(chosen.message), "red"
 	elseif chosen.state == "done" then
 		text, color = "Drag: ready", "green"
+	elseif chosen.state == "cancelled" then
+		text, color = "Drag: cancelled", "yellow"
 	elseif chosen.state == "queued" then
 		text = "Drag: queued"
 	else
@@ -102,7 +105,8 @@ return {
 		end, 500, Status.RIGHT)
 	end,
 
-	entry = function()
+	run = function(context)
+		local scope = rt.scope():child()
 		if os.getenv("HERDR_ENV") ~= "1" or not os.getenv("HERDR_SESSION") then
 			return ya.emit("shell", { "ripdrag -x -a -n -b %s" })
 		end
@@ -110,7 +114,7 @@ return {
 		if #paths == 0 then
 			return begin("submit", { state = "error", message = "No file selected" })
 		end
-		local output, err = Command("python3"):arg({ helper, "submit", "--" }):arg(paths):output()
+		local output, err = Command("python3"):arg({ helper, "submit", "--watched", "--" }):arg(paths):output()
 		if not output or not output.status.success then
 			return begin("submit", { state = "error", message = output and output.stderr or tostring(err) })
 		end
@@ -120,30 +124,73 @@ return {
 		end
 		if not result.id then return end -- Local Herdr launches ripdrag directly.
 		local id = result.id
+		context.id = id
 		begin(id, { state = "queued", file_count = #paths })
-		local child, spawn_error = Command("python3"):arg({ helper, "watch", id })
+		local task = ya.task("custom", { pool = "none", scope = scope, track = true, progress = true })
+			:name("Download to local ripdrag"):spawn()
+		context.task = task
+		if not task:acquire() then return end
+		local child, spawn_error = Command("python3"):arg({ helper, "watch", "--heartbeat", id })
 			:stdout(Command.PIPED):stderr(Command.PIPED):spawn()
+		context.child = child
 		if not child then
+			task:fail(tostring(spawn_error))
 			return update(id, { state = "error", message = tostring(spawn_error) })
 		end
-		local terminal = false
+		local terminal, cancelled = false, false
+		local workload, processed = 0, 0
+		task:progress { total = #paths }
 		while true do
+			if not cancelled and not task:acquire() then
+				child:start_kill()
+				child:wait()
+				-- Observe the receiver's acknowledgement without holding the lease.
+				cancelled = true
+				child = Command("python3"):arg({ helper, "watch", "--observe", id })
+					:stdout(Command.PIPED):stderr(Command.PIPED):spawn()
+				context.child = child
+				if not child then return update(id, { state = "error", message = "Cannot observe cancellation" }) end
+			end
 			local line, event = child:read_line()
 			if event == 2 then break end
 			if event == 0 and line then
 				local value = decode(line)
 				if value and value.id == id then
 					update(id, value)
-					terminal = value.state == "done" or value.state == "error"
+					local total, done = value.bytes_total or workload, value.bytes_done or processed
+					if not cancelled then task:progress { workload = math.max(0, total - workload), processed = math.max(0, done - processed) } end
+					workload, processed = total, done
+					terminal = value.state == "done" or value.state == "error" or value.state == "cancelled"
+					if not cancelled then
+						if value.state == "done" then task:succeed()
+						elseif terminal then task:fail(value.message or value.state) end
+					end
 				end
 			elseif event == 1 and line then
 				update(id, { state = "error", message = clean(line) })
+				task:fail(clean(line))
 				terminal = true
 			end
 		end
 		child:wait()
-		if not terminal then update(id, { state = "error", message = "Progress connection closed" }) end
+		if not terminal then
+			task:fail("Progress connection closed")
+			update(id, { state = "error", message = "Progress connection closed" })
+		end
 		ya.sleep(3)
 		clear_done(id)
+	end,
+	entry = function(self)
+		ya.async(function()
+			local context = {}
+			local ok, err = pcall(self.run, context)
+			if not ok then
+				ya.err(tostring(err))
+				if context.child then context.child:start_kill(); context.child:wait() end
+				if context.task then context.task:fail(tostring(err)) end
+				local value = { state = "error", message = tostring(err) }
+				if context.id then update(context.id, value) else begin("plugin", value) end
+			end
+		end)
 	end,
 }

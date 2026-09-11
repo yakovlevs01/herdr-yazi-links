@@ -49,8 +49,11 @@ def main():
     parser.add_argument('--output', type=Path, help='Retained logs and downloaded test copies')
     parser.add_argument('--progress-check', action='store_true', help='Throttle real SFTP and verify progress, ready and persistent error in Yazi')
     parser.add_argument('--shell-yazi', action='store_true', help='Launch yazi from an ordinary shell pane instead of the link plugin')
+    parser.add_argument('--cancel-check', action='store_true', help='Cancel a running transfer with Yazi task-manager keys; requires --progress-check')
     parser.add_argument('--real-ripdrag', action='store_true', help='Also launch real GUI, manual drop still required')
     args = parser.parse_args()
+    if args.cancel_check and not args.progress_check:
+        parser.error('--cancel-check requires --progress-check')
     actual_ripdrag = shutil.which('ripdrag')
     if args.real_ripdrag and not actual_ripdrag:
         parser.error('ripdrag is absent from the local PATH')
@@ -190,7 +193,10 @@ else: raise RuntimeError('Launcher did not create unique remote server socket')
             if args.shell_yazi:
                 until(lambda: any(p['pane_id'] == pane and p.get('foreground_cwd') for p in panes()), 'shell startup')
                 api('pane.send_input', {'pane_id': pane, 'text': shlex.join(['exec', 'yazi', path]), 'keys': ['enter']})
-            until(lambda: '00-hover' in visible(pane), 'Yazi hovered file')
+            def yazi_ready():
+                screen = visible(pane)
+                return '00-hover' in screen and 'NOR' in screen
+            until(yazi_ready, 'Yazi hovered file and normal-mode status')
             os.write(master, b'\x1b[I')
             time.sleep(0.5)
             return pane
@@ -250,6 +256,26 @@ else: raise RuntimeError('Launcher did not create unique remote server socket')
             pane = open_yazi(slow)
             trigger([(slow, 'p' * (4 * 1024 * 1024))], progress_pane=pane)
             print('PASS rendered intermediate progress and ready after complete download', flush=True)
+            if args.cancel_check:
+                time.sleep(4)
+                previous = len(calls())
+                os.write(master, b'\x07')
+                until(lambda: re.search(r'Drag 1/1 [1-9][0-9]?%', visible(pane)), 'download before cancellation')
+                os.write(master, b'w')
+                time.sleep(0.5)
+                (tmp / 'cancel-tasks.txt').write_text(visible(pane))
+                os.write(master, b'x')
+                time.sleep(0.5)
+                os.write(master, b'\x1b')
+                until(lambda: 'Drag: cancelled' in visible(pane), 'task cancellation reaches receiver and Yazi', timeout=15)
+                (tmp / 'cancelled-pane.txt').write_text(visible(pane))
+                until(lambda: not list((tmp / 'cache').glob('.partial-*')), 'cancelled partial cache removed')
+                time.sleep(2)
+                if len(calls()) != previous:
+                    raise RuntimeError('Cancelled transfer launched ripdrag')
+                print('PASS task-manager cancellation stops SFTP, removes partial files and skips ripdrag', flush=True)
+                trigger([(slow, 'p' * (4 * 1024 * 1024))], progress_pane=pane)
+                print('PASS transfer after cancellation still works', flush=True)
             # The fixture directory sorts first; gg selects it.
             os.write(master, b'gg')
             time.sleep(0.3)
@@ -283,6 +309,7 @@ assert not list(pathlib.Path(info['tmp']).rglob('NOT_EXECUTED'))
             print('PASS real ripdrag process started, PID ' + str(gui.pid) + '; GUI drop requires manual verification', flush=True)
         (tmp / 'result.json').write_text(json.dumps({'host': args.remote, 'session': session,
             'yazi_launch': 'shell' if args.shell_yazi else 'link plugin',
+            'cancellation': 'passed' if args.cancel_check else 'not tested',
             'automated': 'passed', 'progress_ui': 'passed' if args.progress_check else 'not tested', 'gui_drop': 'not tested', 'copies': list(map(str, copied))}, indent=2))
     except Exception:
         if (tmp / 'cache/receiver.log').exists():

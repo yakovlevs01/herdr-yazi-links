@@ -93,6 +93,59 @@ class RemoteClientTests(unittest.TestCase):
 
 
 class ReceiverTests(unittest.TestCase):
+    def test_running_and_queued_cancellation_skip_ripdrag_and_keep_receiver_alive(self):
+        running = threading.Event()
+        finished = threading.Event()
+        frames, attempted = [], []
+        first, second, third = ['a' * 32, 'b' * 32, 'c' * 32]
+        packets = [client.packet({'ready': 'token'})]
+        for job_id in (first, second):
+            packets.append(client.packet({'id': job_id, 'receiver': 'token', 'paths': ['/' + job_id]}))
+        packets.extend([client.packet({'cancel': second, 'receiver': 'token'}),
+                        client.packet({'cancel': first, 'receiver': 'token'}),
+                        client.packet({'id': third, 'receiver': 'token', 'paths': ['/' + third]})])
+        class Input(io.BytesIO):
+            def write(self, data):
+                frame = json.loads(data)
+                frames.append(frame)
+                if frame.get('id') == third and frame.get('state') == 'error':
+                    finished.set()
+                return super().write(data)
+        class Output:
+            def close(self):
+                pass
+            def readline(self, limit):
+                if packets:
+                    if 'cancel' in json.loads(packets[0]):
+                        if not running.wait(3):
+                            raise AssertionError('First transfer did not start')
+                    return packets.pop(0)
+                if not finished.wait(3):
+                    raise AssertionError('Receiver did not process next request')
+                return b''
+        def download(host, paths, directory, batch_progress, cancel):
+            attempted.extend(paths)
+            if paths == ['/' + third]:
+                raise RuntimeError('test next request')
+            running.set()
+            for _ in range(300):
+                client.check_cancel(cancel)
+                threading.Event().wait(.01)
+            raise AssertionError('Transfer ignored cancellation')
+        with tempfile.TemporaryDirectory() as cache:
+            ssh = Mock(stdout=Output(), stdin=Input())
+            with patch.dict(os.environ, {'HERDR_DRAG_CACHE': cache}), \
+                    patch.object(sys, 'argv', ['drag-client.py', 'host', 'session']), \
+                    patch.object(client.shutil, 'which', return_value='/bin/ripdrag'), \
+                    patch.object(client.subprocess, 'Popen', return_value=ssh) as spawn, \
+                    patch.object(client.select, 'select', return_value=([ssh.stdout], [], [])), \
+                    patch.object(client, 'download', side_effect=download), patch('builtins.print'):
+                with self.assertRaisesRegex(RuntimeError, 'SSH connection closed'):
+                    client.main()
+            self.assertEqual(spawn.call_count, 1, 'Cancelled requests must not open ripdrag')
+        self.assertEqual(attempted, ['/' + first, '/' + third])
+        self.assertEqual({f['id'] for f in frames if f.get('state') == 'cancelled'}, {first, second})
+
     def test_startup_conflict_never_downloads_or_opens_ripdrag(self):
         with tempfile.TemporaryDirectory() as cache:
             ssh = Mock(stdout=io.BytesIO(), stdin=io.BytesIO())
@@ -167,7 +220,7 @@ class ReceiverTests(unittest.TestCase):
                         if not finished.wait(timeout=3):
                             raise AssertionError('Worker did not finish')
                         return b''
-                def download(host, paths, directory, batch_progress):
+                def download(host, paths, directory, batch_progress, cancel):
                     batch_progress({'file_index': 2, 'file_count': 2,
                                     'bytes_done': 12, 'bytes_total': 12, 'percent': 99})
                     self.assertFalse(any(f.get('percent') == 100 for f in frames))

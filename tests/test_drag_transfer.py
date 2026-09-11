@@ -83,6 +83,25 @@ class TransferTests(unittest.TestCase):
         self.assertEqual([u['bytes_done'] for u in updates],
                          sorted(u['bytes_done'] for u in updates))
 
+    def test_cancel_removes_partial_batch_and_never_opens_next_file(self):
+        fake = FakeSFTP({'/one': b'a' * 500000, '/two': b'b'})
+        cancelled = [False]
+        def progress(value):
+            if value['bytes_done'] > 0:
+                cancelled[0] = True
+        with patch.object(transfer, 'open_sftp', return_value=contextlib.nullcontext(fake)):
+            with self.assertRaises(transfer.TransferCancelled):
+                transfer.download('host', ['/one', '/two'], self.cache,
+                                  batch_progress=progress, cancel=lambda: cancelled[0])
+        self.assertEqual(fake.opened, ['/one'])
+        self.assertEqual(list(self.cache.iterdir()), [])
+
+    def test_cancel_before_download_does_not_connect(self):
+        with patch.object(transfer, 'open_sftp') as connection:
+            with self.assertRaises(transfer.TransferCancelled):
+                transfer.download('host', ['/one'], self.cache, cancel=lambda: True)
+        connection.assert_not_called()
+
     def test_incomplete_batch_never_emits_success(self):
         fake = FakeSFTP({'/one': b'first', '/two': b'short'})
         fake.sizes['/two'] = 10

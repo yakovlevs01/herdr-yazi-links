@@ -21,7 +21,7 @@ def yazi_command():
             result = subprocess.run(['yazi', '--version'], capture_output=True, text=True, timeout=5)
             match = re.search(r'\b(\d+)\.(\d+)\.(\d+)', result.stdout)
             version = tuple(map(int, match.groups())) if match else ()
-            if result.returncode != 0 or not (version >= (26, 5, 6) and version < (27,)):
+            if result.returncode != 0 or not (version >= (26, 8, 15) and version < (27,)):
                 return str(managed)
         except (OSError, subprocess.TimeoutExpired):
             return str(managed)

@@ -32,7 +32,7 @@ class MachineInstallerTests(unittest.TestCase):
 
     def test_yazi_compatibility_rejects_old_and_future_api(self):
         with patch.object(INSTALL.shutil, 'which', return_value='/bin/yazi'):
-            for version, expected in [('26.1.22', False), ('26.5.6', True), ('26.9.1', True), ('27.1.1', False)]:
+            for version, expected in [('26.1.22', False), ('26.5.6', False), ('26.8.14', False), ('26.8.15', True), ('26.9.1', True), ('27.1.1', False)]:
                 with self.subTest(version=version), patch.object(INSTALL.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, 'Yazi ' + version)):
                     self.assertEqual(INSTALL.compatible_yazi(), expected)
 

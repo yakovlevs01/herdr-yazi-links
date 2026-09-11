@@ -104,12 +104,13 @@ run = [
 
 @unittest.skipUnless(shutil.which('lua'), 'Lua interpreter unavailable')
 class PluginTests(unittest.TestCase):
-    def test_selection_arguments_local_fallback_and_error_notifications(self):
+    def test_selection_progress_local_fallback_and_task_cancellation(self):
         # Execute the real plugin with the documented Yazi API shape; no shell
         # parsing is involved in the helper argv, including control characters.
         script = r'''
 local emitted, commands, rendered = nil, {}, {}
 local env, state, children = {}, {}, {}
+local cancelled, killed, reaped = false, false, false
 os.getenv = function(key) return env[key] end
 local frames = {}
 local id = string.rep("a", 32)
@@ -120,6 +121,14 @@ ya = {
   sync = function(fn) return function(...) return fn(state, ...) end end,
   emit = function(action, args) emitted = { action, args } end,
   sleep = function() end,
+  async = function(fn) fn() end,
+  task = function()
+    local acquisitions = 0
+    local task = {acquire=function() acquisitions=acquisitions+1; return acquisitions==1 or not cancelled end, progress=function() end,
+                  succeed=function() end, fail=function() end}
+    task.name=function() return task end; task.spawn=function() return task end
+    return task
+  end,
   json_decode = function(text)
     if text == "submit" then return {id=id} end
     return frames[text]
@@ -131,6 +140,9 @@ ui = {
   Span = function(text) return {fg=function() return text end} end,
   Line = function(parts) return table.concat(parts) end,
 }
+local scope = {cancelled=function() return cancelled end}
+scope.child=function() return scope end
+rt = {scope=function() return scope end}
 Status = {RIGHT=1, children_add=function(self, fn) children[#children+1]=fn; return #children end}
 cx = { active = { selected = {}, current = { hovered = { url = "/tmp/current" } } } }
 local failure, watcher_error = false, false
@@ -150,7 +162,8 @@ Command = setmetatable({PIPED=1}, {__call=function(_, program)
       local lines = {"progress", "done"}
       return {
         read_line=function() if #lines == 0 then return nil, 2 end; return table.remove(lines,1), 0 end,
-        wait=function() return {success=true} end,
+        start_kill=function() killed=true end,
+        wait=function() reaped=true; return {success=true} end,
       }
     end,
   }
@@ -160,13 +173,13 @@ frames.done={id=id, state="done", percent=100}
 local plugin = dofile(arg[1])
 plugin.setup(state); plugin.setup(state)
 assert(#children == 1, "setup must be idempotent")
-plugin.entry()
+plugin.entry(plugin)
 assert(emitted[1] == "shell" and emitted[2][1] == "ripdrag -x -a -n -b %s")
 assert(#commands == 0)
 env.HERDR_ENV, env.HERDR_SESSION = "1", "test"
-plugin.entry()
-assert(commands[1][2] == "submit" and commands[1][3] == "--" and commands[1][4] == "/tmp/current")
-assert(commands[2][2] == "watch" and commands[2][3] == id)
+plugin.entry(plugin)
+assert(commands[1][2] == "submit" and commands[1][3] == "--watched" and commands[1][4] == "--" and commands[1][5] == "/tmp/current")
+assert(commands[2][2] == "watch" and commands[2][3] == "--heartbeat" and commands[2][4] == id)
 assert(table.concat(rendered):find("2/5 43%%"))
 assert(table.concat(rendered):find("Drag: ready"))
 assert(children[1]({_area={w=100}})=="", "success must clear")
@@ -174,22 +187,27 @@ local paths = { "/tmp/a b'\"$;\n.txt", "/tmp/путь/file.txt", "/tmp/other/fil
 cx.active.selected = {}
 for _, path in ipairs(paths) do table.insert(cx.active.selected, {url=path}) end
 commands={}
-plugin.entry()
-for i,path in ipairs(paths) do assert(commands[1][i+3]==path) end
+plugin.entry(plugin)
+for i,path in ipairs(paths) do assert(commands[1][i+4]==path) end
 cx.active.selected = {["/tmp/old-api-selected"]=true}
-commands={}; plugin.entry(); assert(commands[1][4]=="/tmp/old-api-selected")
-failure=true; plugin.entry()
+commands={}; plugin.entry(plugin); assert(commands[1][5]=="/tmp/old-api-selected")
+failure=true; plugin.entry(plugin)
 assert(children[1]({_area={w=100}}):find("No receiver"))
 cx.active.selected, cx.active.current.hovered = {}, nil
-commands={}; plugin.entry()
+commands={}; plugin.entry(plugin)
 assert(#commands==0 and children[1]({_area={w=100}}):find("No file selected"))
 -- Remote error is persistent and control characters are rendered as spaces.
 failure=false; cx.active.current.hovered={url="/tmp/file"}
 frames.done={id=id,state="error",message="failure\ntext"}
-plugin.entry()
+plugin.entry(plugin)
 assert(children[1]({_area={w=100}}):find("failure text"))
-watcher_error=true; plugin.entry()
+watcher_error=true; plugin.entry(plugin)
 assert(children[1]({_area={w=100}}):find("Watch failed"))
+watcher_error=false; cancelled=true; reaped=false
+frames.done={id=id,state="cancelled"}
+plugin.entry(plugin)
+assert(killed and reaped, "task cancellation must kill and reap the watcher")
+assert(children[1]({_area={w=100}}):find("Drag: cancelled"))
 '''
         result = subprocess.run(['lua', '-', str(ROOT / 'yazi/herdr-drag.yazi/main.lua')], input=script, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)

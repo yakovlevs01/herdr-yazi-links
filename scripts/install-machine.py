@@ -91,7 +91,7 @@ def compatible_yazi(binary="yazi", ya="ya"):
         return False
     result = subprocess.run([str(binary), '--version'], capture_output=True, text=True)
     version = re.search(r'\b(26)\.(\d+)\.(\d+)', result.stdout)
-    return result.returncode == 0 and bool(version) and tuple(map(int, version.groups())) >= (26, 5, 6)
+    return result.returncode == 0 and bool(version) and tuple(map(int, version.groups())) >= (26, 8, 15)
 
 
 def install_yazi(root, selected, manifest):
@@ -193,7 +193,7 @@ def check(root, manifest, selected, sender_only):
     checks = {
         'Python 3.11+': sys.version_info >= (3, 11),
         'pinned patched Herdr': binary.exists() and digest(binary) == manifest['herdr'][selected]['sha256'],
-        'Yazi >=26.5.6, <27 and ya': compatible_yazi() or compatible_yazi(root / '.build/yazi/bin/yazi', root / '.build/yazi/bin/ya'),
+        'Yazi >=26.8.15, <27 and ya': compatible_yazi() or compatible_yazi(root / '.build/yazi/bin/yazi', root / '.build/yazi/bin/ya'),
         'SSH': bool(shutil.which('ssh')),
         'remote checkout path': (Path.home() / 'pets/herdr-yazi-links').resolve() == root.resolve(),
         'launcher': (Path.home() / '.local/bin/herdr-yazi').resolve() == (root / 'herdr-yazi').resolve(),

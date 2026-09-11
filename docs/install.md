@@ -37,7 +37,7 @@ SSH host aliases and authentication remain your SSH configuration. The installer
 ## What it changes
 
 - `.build/bin/herdr` receives the exact patched release binary from `install-assets.json`, verified with SHA256. This includes the existing plain-path patch; progress requires no additional binary patch.
-- Missing or incompatible Yazi gets a verified Yazi 26.9.1 download under `.build/yazi`. Compatible Yazi 26.5.6 or newer within 26.x already in PATH is reused. If an older system Yazi takes precedence, Herdr's file pane uses the managed copy. Your shell's PATH priority remains unchanged.
+- Missing or incompatible Yazi gets a verified Yazi 26.9.1 download under `.build/yazi`. Compatible Yazi 26.8.15 or newer within 26.x already in PATH is reused. If an older system Yazi takes precedence, Herdr's file pane uses the managed copy. Your shell's PATH priority remains unchanged.
 - `.build/drag-venv` contains Paramiko for the local receiver. Missing ripdrag is built under `.build/ripdrag` and linked from `~/.local/bin`.
 - Yazi's Ctrl+G binding and a managed `init.lua` setup block enable the plugin and progress line. The installer respects `YAZI_CONFIG_HOME` and `XDG_CONFIG_HOME` and backs up changed configuration files.
 - `~/.local/bin/herdr-yazi` points to this checkout. Shell configuration appends `~/.local/bin` only when missing. Existing launcher files are backed up before replacement.

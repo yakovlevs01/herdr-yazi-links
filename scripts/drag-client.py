@@ -18,7 +18,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from drag import LIMIT, packet, validate
-from drag_transfer import download
+from drag_transfer import download, TransferCancelled, check_cancel
 
 
 def main():
@@ -56,6 +56,8 @@ def main():
             except (OSError, ValueError):
                 return
     jobs = queue.Queue(maxsize=8)
+    cancellations = {}
+    dispatch_lock = threading.Lock()
     windows = []
     def work():
         while not stop.is_set():
@@ -64,6 +66,10 @@ def main():
             except queue.Empty:
                 continue
             try:
+                cancelled = cancellations[job['id']]
+                def is_cancelled():
+                    return stop.is_set() or cancelled.is_set()
+                check_cancel(is_cancelled)
                 report('Preparing download', job=job['id'], state='downloading')
                 last_progress = [0.0]
                 counters = {}
@@ -77,20 +83,26 @@ def main():
                         report('Downloading', job=job['id'], state='downloading', **value)
                         last_progress[0] = time.monotonic()
                         last_index[0] = value['file_index']
-                files = download(args.host, job['paths'], cache, batch_progress=progress)
-                if stop.is_set():
-                    raise RuntimeError('Disconnected before ripdrag launch; completed cache retained')
-                window = subprocess.Popen([ripdrag, '-x', '-a', '-n', '-b', *map(str, files)],
-                                          stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                          start_new_session=True)
+                files = download(args.host, job['paths'], cache, batch_progress=progress, cancel=is_cancelled)
+                with dispatch_lock:
+                    check_cancel(is_cancelled)
+                    window = subprocess.Popen([ripdrag, '-x', '-a', '-n', '-b', *map(str, files)],
+                                              stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                              start_new_session=True)
+                    cancellations.pop(job['id'], None)  # Once launched, copies must remain available.
                 windows.append(window)
                 time.sleep(0.2)
                 if window.poll() not in (None, 0):
                     raise RuntimeError('ripdrag exited with code ' + str(window.returncode))
                 counters['percent'] = 100
                 report('Opened ripdrag: ' + str(files[0].parent.parent), job=job['id'], state='done', **counters)
+            except TransferCancelled as error:
+                report(str(error), job=job['id'], state='cancelled')
             except Exception as error:
                 report(str(error), 'error', job['id'], state='error')
+            finally:
+                with dispatch_lock:
+                    cancellations.pop(job['id'], None)
     try:
         ready, _, _ = select.select([ssh.stdout], [], [], 20)
         if not ready:
@@ -110,12 +122,22 @@ def main():
             if len(line) > LIMIT + 1024:
                 raise ValueError('Oversized request')
             job = json.loads(line)
-            validate({'paths': job['paths']})
             if job.get('receiver') != token:
                 raise ValueError('Receiver mismatch')
+            if set(job) == {'cancel', 'receiver'}:
+                with dispatch_lock:
+                    event = cancellations.get(job['cancel'])
+                    if event:
+                        event.set()
+                continue
+            validate({'paths': job['paths']})
+            with dispatch_lock:
+                cancellations[job['id']] = threading.Event()
             try:
                 jobs.put_nowait(job)
             except queue.Full:
+                with dispatch_lock:
+                    cancellations.pop(job['id'], None)
                 report('Queue full; request rejected', 'error', job['id'], state='error')
         raise RuntimeError('Receiver SSH connection closed. Reconnect Herdr to restore drag.')
     finally:

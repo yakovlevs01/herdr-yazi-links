@@ -96,6 +96,43 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(job['id'], json.loads(result.stdout)['id'])
         self.assertIn('test computer', json.loads(result.stdout)['message'])
 
+    def test_killed_watcher_cancels_only_its_transfer(self):
+        broker = self.start()
+        greeting = self.read(broker)
+        response = self.request({'paths': ['/one'], 'watched': True})
+        job = self.read(broker)
+        other = self.request({'paths': ['/two']})
+        self.read(broker)
+        watcher = subprocess.Popen([sys.executable, str(ROOT / 'drag.py'), 'watch', response['id']],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   env=dict(self.env, HERDR_SESSION=self.session))
+        try:
+            self.assertEqual(json.loads(watcher.stdout.readline())['state'], 'queued')
+            # Give the broker time to observe the held lock before terminating.
+            time.sleep(1.2)
+            watcher.kill()
+            watcher.wait(timeout=3)
+            cancelled = self.read(broker)
+            self.assertEqual(cancelled, {'cancel': job['id'], 'receiver': greeting['ready']})
+            broker.stdin.write(drag.packet({'id': job['id'], 'state': 'cancelled'}))
+            broker.stdin.flush()
+            result = self.cli('watch', job['id'])
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout.splitlines()[-1])['state'], 'cancelled')
+            state, _ = self.locations()
+            self.assertEqual(json.loads(drag.job_path(state, other['id']).read_text())['state'], 'queued')
+        finally:
+            if watcher.poll() is None:
+                watcher.kill(); watcher.wait()
+            watcher.stdout.close(); watcher.stderr.close()
+
+    def test_missing_watcher_cancels_after_startup_grace(self):
+        broker = self.start()
+        self.read(broker)
+        response = self.request({'paths': ['/one'], 'watched': True})
+        self.read(broker)
+        self.assertEqual(self.read(broker, timeout=7)['cancel'], response['id'])
+
     def test_rejects_commands_and_invalid_paths_but_keeps_serving(self):
         process = self.start()
         self.read(process)

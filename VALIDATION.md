@@ -80,3 +80,25 @@ Evidence on the desktop:
 - macOS: `/tmp/herdr-drag-smoke-5dr0w8o1/`, with the same captures.
 
 These checks verify the terminal progress display and transfer/launch path, not a GUI drop into another application. No system notification is used. Herdr binaries remain the previously tested pinned build; Yazi progress uses its Lua API. Release installation CI downloads the published artifacts into a fresh Ubuntu runner, executes the full installer twice, checks configuration, and exercises real patched Herdr/Yazi clicks in an isolated session.
+
+## Transfer cancellation follow-up
+
+The cancellation implementation uses a named Yazi custom task, a watcher lock
+owned by that task, a session-scoped cancellation message and cancellable SFTP
+reads. Normal plugin-entry cancellation alone does not stop Yazi 26.8.15's
+blocking plugin code. The custom task handle provides the cancellation state.
+Yazi/ya 26.8.15 is now the minimum accepted by the installer.
+
+All 73 unit/integration tests passed, including watcher termination, missing
+watcher startup, active and queued cancellation, partial-cache removal, no
+ripdrag launch after cancellation, and processing the next request. The macOS
+run at `/tmp/herdr-drag-smoke-zyjeggmo/` passed the real launcher, shell-launched
+Yazi, Ctrl+G, task-manager `w`/`x`, cancelled status, cleanup and a successful
+subsequent transfer. The local ripdrag recorder checks process arguments;
+GUI drag-and-drop was not part of this cancellation test. Only UUID test
+sessions were stopped.
+
+Ubuntu also passed the same cancellation and recovery check at
+`/tmp/herdr-drag-smoke-znk346hs/`, including `cancelled-pane.txt`. The shell-launch
+test now waits for Yazi's normal-mode status, so an echoed shell command cannot
+be mistaken for a ready file manager.

@@ -77,3 +77,13 @@ Use `python3 scripts/drag-smoke.py --remote HOST --progress-check` to verify int
 A disappearing `Queued for ...` popup comes from the older Yazi plugin. A Yazi process started before the upgrade can keep that Lua code loaded even after the installer replaces files on disk. Reconnecting the Herdr client does not restart remote Yazi.
 
 After any active transfer finishes, quit only that Yazi with `q` and run `yazi` again in the same pane. Leave the Herdr server and other panes running. The current plugin shows `Drag 1/1 42%` on the right of Yazi's bottom status line, with a bar if the pane is wide enough, and no queued popup. Starting Yazi manually in a shell pane is supported.
+
+## Cancel a transfer
+
+Press `w` in Yazi to open its task manager, select `Download to local ripdrag`, and press `x`. The receiver stops that request, removes its incomplete batch and does not open ripdrag. Queued requests can also be cancelled. The status line changes to `Drag: cancelled` after the receiver acknowledges cancellation; other requests continue normally. Detection normally takes about a second, with a five-second grace period if the watcher could not start.
+
+Once ripdrag has opened, the transfer is finished and cancellation cannot revoke the files. Fully downloaded copies remain in the cache, including a batch cancelled just after it was committed. Remote originals are never removed. Escape outside the task manager is not a transfer cancellation command.
+
+This uses Yazi's custom task API and requires Yazi/ya 26.8.15 or later within 26.x; the single installer handles the version check. After upgrading, restart only Yazi and reconnect the local `herdr-yazi` client so both the sender and receiver load the cancellation code. Do not restart the Herdr server.
+
+Run `python3 scripts/drag-smoke.py --remote HOST --progress-check --shell-yazi --cancel-check` to test actual task-manager keys, stopped SFTP, partial-cache cleanup, absence of a ripdrag launch, and a subsequent successful transfer.

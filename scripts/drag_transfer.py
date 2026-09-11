@@ -21,10 +21,20 @@ class TransferError(RuntimeError):
     pass
 
 
+class TransferCancelled(TransferError):
+    pass
+
+
+def check_cancel(cancel):
+    if cancel and cancel():
+        raise TransferCancelled('Transfer cancelled')
+
+
 class SSHStream:
     """Paramiko socket interface over an OpenSSH SFTP subprocess."""
 
-    def __init__(self, host):
+    def __init__(self, host, cancel=None):
+        self.cancel = cancel
         if not isinstance(host, str) or not host or host.startswith('-') or '\0' in host:
             raise TransferError('Invalid SSH host')
         self.process = subprocess.Popen(
@@ -38,11 +48,17 @@ class SSHStream:
         return 'openssh-sftp'
 
     def send(self, data):
+        check_cancel(self.cancel)
         return self.process.stdin.write(data)
 
     def recv(self, count):
-        if not select.select([self.process.stdout], [], [], 15)[0]:
-            raise TransferError('SFTP response timed out after 15 seconds')
+        deadline = time.monotonic() + 15
+        while True:
+            check_cancel(self.cancel)
+            if select.select([self.process.stdout], [], [], 0.2)[0]:
+                break
+            if time.monotonic() >= deadline:
+                raise TransferError('SFTP response timed out after 15 seconds')
         return self.process.stdout.read(count)
 
     def close(self):
@@ -61,12 +77,12 @@ class SSHStream:
 
 
 @contextlib.contextmanager
-def open_sftp(host):
+def open_sftp(host, cancel=None):
     try:
         import paramiko
     except ImportError as exc:
         raise TransferError('Paramiko is required; run sh scripts/install-drag-receiver.sh') from exc
-    stream = SSHStream(host)
+    stream = SSHStream(host, cancel)
     try:
         with paramiko.SFTPClient(stream) as client:
             yield client
@@ -88,7 +104,7 @@ def validate_paths(paths):
     return list(paths)
 
 
-def download(host, paths, cache, progress=None, batch_progress=None):
+def download(host, paths, cache, progress=None, batch_progress=None, cancel=None):
     """Download a batch atomically; progress receives (remote_path, done, total).
 
     On any failure the entire unfinished batch is removed. Returned Paths are
@@ -97,15 +113,17 @@ def download(host, paths, cache, progress=None, batch_progress=None):
     the caller has opened ripdrag successfully.
     """
     paths = validate_paths(paths)
+    check_cancel(cancel)
     cache = Path(cache).expanduser().absolute()
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.partial-', dir=cache))
     ready = cache / ('transfer-' + staging.name.removeprefix('.partial-'))
     results = []
     try:
-        with open_sftp(host) as client:
+        with open_sftp(host, cancel=cancel) as client:
             metadata = []
             for remote_path in paths:
+                check_cancel(cancel)
                 before = client.lstat(remote_path)
                 if not stat.S_ISREG(before.st_mode or 0):
                     raise TransferError(f'Only regular files are supported: {remote_path!r}')
@@ -140,6 +158,7 @@ def download(host, paths, cache, progress=None, batch_progress=None):
                     if not stat.S_ISREG(opened.st_mode or 0) or opened.st_size != total:
                         raise TransferError(f'File changed before download: {remote_path!r}')
                     while True:
+                        check_cancel(cancel)
                         block = source.read(128 * 1024)
                         if not block:
                             break
@@ -160,6 +179,7 @@ def download(host, paths, cache, progress=None, batch_progress=None):
                     raise TransferError(f'File changed or download incomplete: {remote_path!r}')
                 completed_bytes += done
                 results.append(ready / target.relative_to(staging))
+        check_cancel(cancel)
         (staging / '.complete').touch(mode=0o600)
         staging.rename(ready)
         return results

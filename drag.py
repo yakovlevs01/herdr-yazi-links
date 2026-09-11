@@ -15,6 +15,7 @@ import time
 import uuid
 
 LIMIT = 65536
+TERMINAL = ('done', 'error', 'cancelled')
 
 
 def state_root():
@@ -41,8 +42,10 @@ def locations(session):
 
 
 def validate(value):
-    if not isinstance(value, dict) or set(value) != {'paths'}:
+    if not isinstance(value, dict) or not set(value) <= {'paths', 'watched'} or 'paths' not in value:
         raise ValueError('Only file path requests are accepted')
+    if 'watched' in value and value['watched'] is not True:
+        raise ValueError('Invalid watcher flag')
     paths = value['paths']
     if not isinstance(paths, list) or not 1 <= len(paths) <= 256:
         raise ValueError('Select between 1 and 256 files')
@@ -70,7 +73,7 @@ def job_path(state, job_id):
     return state / ('job-' + job_id + '.json')
 
 
-def watch(job_id, session=None):
+def watch(job_id, session=None, heartbeat=False):
     """Stream one transfer, including a terminal error when its receiver is gone."""
     state, _ = locations(session or session_name())
     path = job_path(state, job_id)
@@ -79,7 +82,7 @@ def watch(job_id, session=None):
     previous = None
     while True:
         value = json.loads(path.read_text())
-        if value.get('state') not in ('done', 'error'):
+        if value.get('state') not in TERMINAL:
             online = False
             with (state / 'receiver.lock').open('a+') as lock:
                 try:
@@ -93,10 +96,10 @@ def watch(job_id, session=None):
             if not online or current.get('receiver') != value.get('receiver'):
                 value = dict(value, state='error', level='error',
                              message='Receiver disconnected. Reconnect Herdr and submit again.')
-        if value != previous:
+        if value != previous or heartbeat:
             yield value
             previous = value
-        if value.get('state') in ('done', 'error'):
+        if value.get('state') in TERMINAL:
             return
         time.sleep(0.2)
 
@@ -121,6 +124,7 @@ def serve(session, owner):
             sys.stdout.buffer.flush()
             last = time.monotonic()
             buffered = b''
+            watched = {}
             try:
                 while time.monotonic() - last < 15:
                     ready, _, _ = select.select([listener, sys.stdin.buffer], [], [], 1)
@@ -143,10 +147,12 @@ def serve(session, owner):
                                     continue  # Legacy feedback remains visible through status.
                                 if path.exists():
                                     previous = json.loads(path.read_text())
-                                    if previous.get('receiver') == token and previous.get('state') not in ('done', 'error'):
+                                    if previous.get('receiver') == token and previous.get('state') not in TERMINAL:
                                         update = dict(previous, **feedback)
                                         update['receiver'] = token
                                         atomic_json(path, update)
+                                        if update.get('state') in TERMINAL:
+                                            watched.pop(feedback['id'], None)
                     if listener in ready:
                         with listener.accept()[0] as client:
                             client.settimeout(2)
@@ -163,6 +169,8 @@ def serve(session, owner):
                                 }
                                 atomic_json(job_path(state, job['id']), queued)
                                 atomic_json(state / 'status.json', queued)
+                                if value.get('watched'):
+                                    watched[job['id']] = {'deadline': time.monotonic() + 5, 'active': False}
                                 sys.stdout.buffer.write(packet(job))
                                 sys.stdout.buffer.flush()
                                 client.sendall(packet({'message': 'Queued for ' + owner, 'id': job['id']}))
@@ -171,11 +179,24 @@ def serve(session, owner):
                                     client.sendall(packet({'error': str(error)}))
                                 except OSError:
                                     pass  # A cancelled sender must not kill the receiver.
+                    for job_id, meta in list(watched.items()):
+                        if meta.get('cancel_sent'):
+                            continue
+                        with (state / ('job-' + job_id + '.watch')).open('a+') as guard:
+                            try:
+                                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            except BlockingIOError:
+                                meta['active'] = True
+                                continue
+                        if meta['active'] or time.monotonic() >= meta['deadline']:
+                            sys.stdout.buffer.write(packet({'cancel': job_id, 'receiver': token}))
+                            sys.stdout.buffer.flush()
+                            meta['cancel_sent'] = True
             finally:
                 address.unlink(missing_ok=True)
 
 
-def submit(paths):
+def submit(paths, watched=False):
     paths = [os.path.abspath(path) for path in paths]
     validate({'paths': paths})
     session = session_name()
@@ -186,7 +207,10 @@ def submit(paths):
                 with socket.socket(socket.AF_UNIX) as client:
                     client.settimeout(3)
                     client.connect(str(address))
-                    client.sendall(packet({'paths': paths}))
+                    request = {'paths': paths}
+                    if watched:
+                        request['watched'] = True
+                    client.sendall(packet(request))
                     response = json.loads(client.makefile('rb').readline(LIMIT))
             except OSError as error:
                 raise RuntimeError('No active local receiver. Reconnect with herdr-yazi --remote HOST.') from error
@@ -205,8 +229,11 @@ def main():
     broker.add_argument('session')
     broker.add_argument('owner')
     send = sub.add_parser('submit')
+    send.add_argument('--watched', action='store_true')
     send.add_argument('paths', nargs='+')
     watcher = sub.add_parser('watch')
+    watcher.add_argument('--heartbeat', action='store_true')
+    watcher.add_argument('--observe', action='store_true', help='Observe without keeping the transfer alive')
     watcher.add_argument('id')
     status = sub.add_parser('status')
     status.add_argument('session', nargs='?', default=session_name())
@@ -214,10 +241,15 @@ def main():
     if args.command == 'serve':
         serve(args.session, args.owner)
     elif args.command == 'submit':
-        print(json.dumps(submit(args.paths)))
+        print(json.dumps(submit(args.paths, args.watched)))
     elif args.command == 'watch':
-        for value in watch(args.id):
-            print(json.dumps(value), flush=True)
+        state, _ = locations(session_name())
+        job_path(state, args.id)  # Validate before constructing the lock path.
+        with (state / ('job-' + args.id + '.watch')).open('a+') as guard:
+            if not args.observe:
+                fcntl.flock(guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            for value in watch(args.id, heartbeat=args.heartbeat):
+                print(json.dumps(value), flush=True)
     else:
         state, _ = locations(args.session)
         print((state / 'status.json').read_text() if (state / 'status.json').exists() else '{"message":"No transfer status"}')
