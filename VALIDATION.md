@@ -61,6 +61,15 @@ Unit/integration tests cover JSON schema and size boundaries, aborted request so
 
 ## 0.4.0 progress and unified installation
 
+Follow-up: `scripts/drag-smoke.py --remote my-mac-m1 --progress-check --shell-yazi`
+also passed with Yazi launched from an ordinary shell pane. This exposed a narrow
+pane layout issue: long errors pushed their `Drag error:` prefix outside the pane.
+The plugin now reserves space for Yazi's standard status fields. The passing run
+at `/tmp/herdr-drag-smoke-4zl_oqh3/` includes intermediate percentage, ready and
+persistent error captures, verified downloads and ripdrag arguments. All 68 tests
+passed. A queued popup in a pre-upgrade Yazi process still requires restarting
+that Yazi to load the new Lua plugin; reconnecting Herdr preserves the old process.
+
 The single `./install.sh` completed on the Linux desktop and macOS ARM64. On macOS it installed Python 3.13, GTK4, built ripdrag 0.4.12, created the Paramiko environment, and configured the Lua plugin. Ubuntu passed `./install.sh --sender-only`; its GUI receiver was not installed because that host is used as the sender in these checks. The installer supports a full Ubuntu install with the user's sudo password for missing GTK development packages.
 
 Both hosts passed `scripts/drag-smoke.py --remote HOST --progress-check`. This uses the real launcher and Ctrl+G in real Yazi, throttles OpenSSH SFTP to make a 4 MiB transfer observable, and verifies an intermediate percentage in the rendered status line, completion, and a persistent directory error without starting ripdrag. Remote originals and retained downloaded copies were checked. Only UUID test sessions were stopped.

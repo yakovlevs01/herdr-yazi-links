@@ -48,6 +48,7 @@ def main():
     parser.add_argument('--launcher', type=Path, default=ROOT / 'herdr-yazi')
     parser.add_argument('--output', type=Path, help='Retained logs and downloaded test copies')
     parser.add_argument('--progress-check', action='store_true', help='Throttle real SFTP and verify progress, ready and persistent error in Yazi')
+    parser.add_argument('--shell-yazi', action='store_true', help='Launch yazi from an ordinary shell pane instead of the link plugin')
     parser.add_argument('--real-ripdrag', action='store_true', help='Also launch real GUI, manual drop still required')
     args = parser.parse_args()
     actual_ripdrag = shutil.which('ripdrag')
@@ -173,13 +174,22 @@ else: raise RuntimeError('Launcher did not create unique remote server socket')
         panes = lambda: api('pane.list')['panes']
         source = until(lambda: panes(), 'initial shell pane')[0]['pane_id']
         def visible(pane):
-            return api('pane.read', {'pane_id': pane, 'source': 'visible', 'format': 'text'})['read']['text']
+            screen = api('pane.read', {'pane_id': pane, 'source': 'visible', 'format': 'text'})['read']['text']
+            (tmp / 'last-pane.txt').write_text(screen)
+            return screen
         def open_yazi(path):
             before = {p['pane_id'] for p in panes()}
-            api('plugin.pane.open', {'plugin_id': 'local.yazi-links', 'entrypoint': 'yazi',
-                'placement': 'split', 'target_pane_id': source, 'direction': 'right',
-                'cwd': str(Path(path).parent), 'focus': True, 'env': {'YAZI_LINK_PATH': path}})
+            if args.shell_yazi:
+                api('pane.split', {'pane_id': source, 'direction': 'right',
+                    'cwd': str(Path(path).parent), 'focus': True})
+            else:
+                api('plugin.pane.open', {'plugin_id': 'local.yazi-links', 'entrypoint': 'yazi',
+                    'placement': 'split', 'target_pane_id': source, 'direction': 'right',
+                    'cwd': str(Path(path).parent), 'focus': True, 'env': {'YAZI_LINK_PATH': path}})
             pane = until(lambda: next((p['pane_id'] for p in panes() if p['pane_id'] not in before), None), 'Yazi pane')
+            if args.shell_yazi:
+                until(lambda: any(p['pane_id'] == pane and p.get('foreground_cwd') for p in panes()), 'shell startup')
+                api('pane.send_input', {'pane_id': pane, 'text': shlex.join(['exec', 'yazi', path]), 'keys': ['enter']})
             until(lambda: '00-hover' in visible(pane), 'Yazi hovered file')
             os.write(master, b'\x1b[I')
             time.sleep(0.5)
@@ -272,6 +282,7 @@ assert not list(pathlib.Path(info['tmp']).rglob('NOT_EXECUTED'))
                 raise RuntimeError('Real ripdrag exited before GUI check: ' + str(gui.returncode))
             print('PASS real ripdrag process started, PID ' + str(gui.pid) + '; GUI drop requires manual verification', flush=True)
         (tmp / 'result.json').write_text(json.dumps({'host': args.remote, 'session': session,
+            'yazi_launch': 'shell' if args.shell_yazi else 'link plugin',
             'automated': 'passed', 'progress_ui': 'passed' if args.progress_check else 'not tested', 'gui_drop': 'not tested', 'copies': list(map(str, copied))}, indent=2))
     except Exception:
         if (tmp / 'cache/receiver.log').exists():

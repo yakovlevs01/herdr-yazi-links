@@ -70,4 +70,10 @@ Cleanup removes only completed batches older than the specified age. It does not
 
 The queue/receiver separation is similar to [yazi-ssh.yazi](https://github.com/affromero/yazi-ssh.yazi), which wraps SSH itself. [drag.yazi](https://github.com/Joao-Queiroga/drag.yazi) handles local drag. This module uses [ripdrag](https://github.com/nik012003/ripdrag) locally and adds session ownership around Herdr's existing remote launch. It needs no additional Herdr binary patch.
 
-Use `python3 scripts/drag-smoke.py --remote HOST --progress-check` to verify intermediate percentages and persistent errors in real Yazi with throttled SFTP.
+Use `python3 scripts/drag-smoke.py --remote HOST --progress-check` to verify intermediate percentages and persistent errors in real Yazi with throttled SFTP. Add `--shell-yazi` to launch `yazi` from an ordinary shell pane instead of opening it through the link plugin.
+
+## A queued popup appears, but no progress
+
+A disappearing `Queued for ...` popup comes from the older Yazi plugin. A Yazi process started before the upgrade can keep that Lua code loaded even after the installer replaces files on disk. Reconnecting the Herdr client does not restart remote Yazi.
+
+After any active transfer finishes, quit only that Yazi with `q` and run `yazi` again in the same pane. Leave the Herdr server and other panes running. The current plugin shows `Drag 1/1 42%` on the right of Yazi's bottom status line, with a bar if the pane is wide enough, and no queued popup. Starting Yazi manually in a shell pane is supported.

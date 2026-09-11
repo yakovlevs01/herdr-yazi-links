@@ -93,7 +93,9 @@ return {
 		if state.status_child then return end
 		state.jobs = state.jobs or {}
 		state.status_child = Status:children_add(function(status)
-			local width = math.max(10, math.floor(status._area.w * 0.65))
+			-- Reserve space for Yazi's permissions and position segments. Otherwise
+			-- a long message pushes its own prefix outside a narrow pane.
+			local width = math.max(10, math.min(math.floor(status._area.w * 0.65), status._area.w - 40))
 			local text, color = status_text(state, width)
 			if text == "" then return "" end
 			return ui.Line { ui.Span(" " .. ui.truncate(text, { max = width }) .. " "):fg(color) }
