@@ -14,8 +14,10 @@ This is a community plugin, not an official Herdr component. [Русский](RE
 
 Installing the plugin alone does not make plain-text paths clickable. The
 patched build was tested on Linux with Herdr 0.9.0 at the revision recorded in
-[patches/upstream.toml](patches/upstream.toml). Unmodified Herdr versions, macOS
-and remote sessions need separate end-to-end verification.
+[patches/upstream.toml](patches/upstream.toml). The plugin-only mode was also verified on the unmodified system Herdr 0.9.0:
+Ctrl-click on an OSC 8 file hyperlink opened Yazi with the target selected;
+Ctrl-click on a plain filename did not invoke the plugin. macOS, remote sessions
+and Markdown-to-OSC-8 conversion in agent harnesses remain untested.
 
 ## Install the plugin
 
