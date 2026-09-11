@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+plugin_dir=$(python3 -c 'import pathlib, sys; print(pathlib.Path(sys.argv[1]).resolve().parent)' "$0")
+binary="$plugin_dir/.build/bin/herdr"
+if [ ! -x "$binary" ]; then
+    echo "Сначала собери Herdr: $plugin_dir/build.sh" >&2
+    exit 1
+fi
+# A separate server is necessary: an existing stable server has no path scanner.
+# Do not inherit the calling pane's socket when launched from another Herdr.
+unset HERDR_SOCKET_PATH HERDR_CLIENT_SOCKET_PATH HERDR_ENV
+unset HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID
+"$binary" --session yazi-links plugin link "$plugin_dir" >/dev/null
+exec "$binary" --session yazi-links "$@"

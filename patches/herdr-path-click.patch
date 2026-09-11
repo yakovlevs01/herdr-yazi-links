@@ -1,0 +1,122 @@
+diff --git a/src/app/actions.rs b/src/app/actions.rs
+index d5d13d5..b4c5fb5 100644
+--- a/src/app/actions.rs
++++ b/src/app/actions.rs
+@@ -1151,7 +1151,46 @@ fn url_at_runtime_cell(
+         .find('\n')
+         .map_or(visible_text.len(), |idx| logical_cell.byte_index + idx);
+     let line = visible_text.get(line_start..line_end)?;
+-    url_at_column(line, logical_cell.logical_col).map(str::to_owned)
++    url_at_column(line, logical_cell.logical_col)
++        .map(str::to_owned)
++        .or_else(|| {
++            // Resolve on the server that owns the pane, and only on a click.
++            // Never stat paths in the render/PTY parsing hot paths.
++            let cwd = runtime.follow_cwd()?;
++            file_url_at_column(line, logical_cell.logical_col, &cwd)
++        })
++}
++
++fn file_url_at_column(row: &str, col: u16, cwd: &std::path::Path) -> Option<String> {
++    let cells = text_cells(row);
++    let clicked_idx = cell_index_at_column(&cells, col)?;
++    let span = quoted_path_span_at_column(&cells, clicked_idx)
++        .or_else(|| token_span_at_column(&cells, clicked_idx))?;
++    let token =
++        row.get(byte_index_for_cell(row, span.start)..byte_index_after_cell(row, span.end))?;
++    // Do not reinterpret URI schemes or line/column suffixes as filesystem paths.
++    if token.contains(':') || token.chars().any(char::is_control) {
++        return None;
++    }
++    let path = std::path::Path::new(token);
++    let path = if path.is_absolute() {
++        path.to_path_buf()
++    } else {
++        cwd.join(path)
++    };
++    if !path.is_file() && !path.is_dir() {
++        return None;
++    }
++    let mut uri = String::from("file://");
++    for byte in path.to_str()?.bytes() {
++        if byte.is_ascii_alphanumeric() || b"/-._~".contains(&byte) {
++            uri.push(char::from(byte));
++        } else {
++            use std::fmt::Write;
++            write!(uri, "%{byte:02X}").ok()?;
++        }
++    }
++    Some(uri)
+ }
+ 
+ pub(crate) fn safe_web_url(url: &str) -> Option<&str> {
+@@ -2522,6 +2561,69 @@ mod tests {
+         assert_eq!(selected_url("open file:///tmp/report", "file"), None);
+     }
+ 
++    #[test]
++    fn file_links_resolve_existing_absolute_relative_and_unicode_paths() {
++        let root = std::env::temp_dir().join(format!(
++            "herdr-file-links-{}-{}",
++            std::process::id(),
++            std::time::SystemTime::now()
++                .duration_since(std::time::UNIX_EPOCH)
++                .unwrap()
++                .as_nanos()
++        ));
++        std::fs::create_dir_all(&root).unwrap();
++        let dir = root.join("src");
++        std::fs::create_dir(&dir).unwrap();
++        let file = dir.join("отчёт.rs");
++        std::fs::write(&file, "example").unwrap();
++        std::fs::write(root.join("README.md"), "example").unwrap();
++        for token in [
++            "src/отчёт.rs",
++            "./src/отчёт.rs",
++            "README.md",
++            "src",
++            file.to_str().unwrap(),
++        ] {
++            let row = format!("Изменён `{token}`, готово.");
++            let result = file_url_at_column(&row, col_of(&row, token), &root).unwrap();
++            assert!(result.starts_with("file:///"), "{result}");
++            assert!(!result.contains('`'));
++            if token.contains("отчёт") {
++                assert!(result.ends_with("%D0%BE%D1%82%D1%87%D1%91%D1%82.rs"));
++            }
++        }
++        assert!(file_url_at_column("../README.md", 3, &dir).is_some());
++        assert!(file_url_at_column("README.md", 0, &dir).is_none());
++        for row in [
++            "missing.rs",
++            "https://example.com/README.md",
++            "README.md:12:3",
++            " ",
++        ] {
++            assert_eq!(file_url_at_column(row, 0, &root), None, "{row}");
++        }
++    }
++
++    #[test]
++    fn file_links_handle_quoted_spaces_and_url_metacharacters() {
++        let root = std::env::temp_dir().join(format!(
++            "herdr-file-links-{}-{}",
++            std::process::id(),
++            std::time::SystemTime::now()
++                .duration_since(std::time::UNIX_EPOCH)
++                .unwrap()
++                .as_nanos()
++        ));
++        std::fs::create_dir_all(&root).unwrap();
++        let dir = root.join("my files");
++        std::fs::create_dir(&dir).unwrap();
++        std::fs::write(dir.join("a#b%.txt"), "example").unwrap();
++        let row = "См. `my files/a#b%.txt`.";
++        let uri = file_url_at_column(row, col_of(row, "files"), &root).unwrap();
++        assert!(uri.ends_with("my%20files/a%23b%25.txt"));
++        assert_eq!(file_url_at_column(row, col_of(row, "См"), &root), None);
++    }
++
+     #[test]
+     fn apply_workspace_git_statuses_updates_matching_workspace() {
+         let mut state = app_with_workspaces(&["one", "two"]);
