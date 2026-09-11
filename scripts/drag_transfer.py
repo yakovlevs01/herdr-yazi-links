@@ -88,11 +88,13 @@ def validate_paths(paths):
     return list(paths)
 
 
-def download(host, paths, cache, progress=None):
+def download(host, paths, cache, progress=None, batch_progress=None):
     """Download a batch atomically; progress receives (remote_path, done, total).
 
     On any failure the entire unfinished batch is removed. Returned Paths are
     absolute and each preserves its original basename in an indexed directory.
+    batch_progress receives aggregate counters; percent is capped at 99 until
+    the caller has opened ripdrag successfully.
     """
     paths = validate_paths(paths)
     cache = Path(cache).expanduser().absolute()
@@ -102,8 +104,24 @@ def download(host, paths, cache, progress=None):
     results = []
     try:
         with open_sftp(host) as client:
-            for index, remote_path in enumerate(paths):
+            metadata = []
+            for remote_path in paths:
                 before = client.lstat(remote_path)
+                if not stat.S_ISREG(before.st_mode or 0):
+                    raise TransferError(f'Only regular files are supported: {remote_path!r}')
+                if before.st_size is None or before.st_size < 0:
+                    raise TransferError(f'Server omitted file size: {remote_path!r}')
+                metadata.append(before)
+            batch_total = sum(item.st_size for item in metadata)
+            completed_bytes = 0
+            def emit(index, done):
+                if batch_progress:
+                    amount = completed_bytes + done
+                    batch_progress({'file_index': index + 1, 'file_count': len(paths),
+                                    'bytes_done': amount, 'bytes_total': batch_total,
+                                    'percent': min(99, amount * 100 // batch_total) if batch_total else 0})
+            for index, remote_path in enumerate(paths):
+                before = metadata[index]
                 if not stat.S_ISREG(before.st_mode or 0):
                     raise TransferError(f'Only regular files are supported: {remote_path!r}')
                 directory = staging / f'{index:04d}'
@@ -113,6 +131,7 @@ def download(host, paths, cache, progress=None):
                 if total is None or total < 0:
                     raise TransferError(f'Server omitted file size: {remote_path!r}')
                 done = 0
+                emit(index, done)
                 if progress:
                     progress(remote_path, done, total)
                 with client.open(remote_path, 'rb') as source, target.open('xb') as dest:
@@ -128,6 +147,7 @@ def download(host, paths, cache, progress=None):
                         done += len(block)
                         if done > total:
                             raise TransferError(f'File grew during download: {remote_path!r}')
+                        emit(index, done)
                         if progress:
                             progress(remote_path, done, total)
                     dest.flush()
@@ -138,6 +158,7 @@ def download(host, paths, cache, progress=None):
                         or not stat.S_ISREG(final.st_mode or 0)
                         or after.st_mtime != before.st_mtime or final.st_mtime != before.st_mtime):
                     raise TransferError(f'File changed or download incomplete: {remote_path!r}')
+                completed_bytes += done
                 results.append(ready / target.relative_to(staging))
         (staging / '.complete').touch(mode=0o600)
         staging.rename(ready)

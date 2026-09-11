@@ -42,10 +42,10 @@ def main():
         with write_lock:
             ssh.stdin.write(packet(value))
             ssh.stdin.flush()
-    def report(message, level='info', job=None):
-        log.write(json.dumps({'time': time.time(), 'level': level, 'id': job, 'message': message}) + '\n')
+    def report(message, level='info', job=None, **status):
+        log.write(json.dumps({'time': time.time(), 'level': level, 'id': job, 'message': message, **status}) + '\n')
         try:
-            feedback({'message': message, 'level': level, 'id': job})
+            feedback({'message': message, 'level': level, 'id': job, **status})
         except (OSError, ValueError):
             pass
     def heartbeat():
@@ -64,15 +64,20 @@ def main():
             except queue.Empty:
                 continue
             try:
-                report('Downloading ' + str(len(job['paths'])) + ' file(s)', job=job['id'])
+                report('Preparing download', job=job['id'], state='downloading')
                 last_progress = [0.0]
-                def progress(path, done, total):
+                counters = {}
+                last_index = [None]
+                def progress(value):
                     if stop.is_set():
                         raise RuntimeError('Receiver disconnected; download cancelled')
-                    if time.monotonic() - last_progress[0] >= 2 or done == total:
-                        report(f'{path}: {done}/{total} bytes', job=job['id'])
+                    counters.update(value)
+                    if (time.monotonic() - last_progress[0] >= 0.2
+                            or value['file_index'] != last_index[0]):
+                        report('Downloading', job=job['id'], state='downloading', **value)
                         last_progress[0] = time.monotonic()
-                files = download(args.host, job['paths'], cache, progress)
+                        last_index[0] = value['file_index']
+                files = download(args.host, job['paths'], cache, batch_progress=progress)
                 if stop.is_set():
                     raise RuntimeError('Disconnected before ripdrag launch; completed cache retained')
                 window = subprocess.Popen([ripdrag, '-x', '-a', '-n', '-b', *map(str, files)],
@@ -82,9 +87,10 @@ def main():
                 time.sleep(0.2)
                 if window.poll() not in (None, 0):
                     raise RuntimeError('ripdrag exited with code ' + str(window.returncode))
-                report('Opened ripdrag: ' + str(files[0].parent.parent), job=job['id'])
+                counters['percent'] = 100
+                report('Opened ripdrag: ' + str(files[0].parent.parent), job=job['id'], state='done', **counters)
             except Exception as error:
-                report(str(error), 'error', job['id'])
+                report(str(error), 'error', job['id'], state='error')
     try:
         ready, _, _ = select.select([ssh.stdout], [], [], 20)
         if not ready:
@@ -110,7 +116,7 @@ def main():
             try:
                 jobs.put_nowait(job)
             except queue.Full:
-                report('Queue full; request rejected', 'error', job['id'])
+                report('Queue full; request rejected', 'error', job['id'], state='error')
         raise RuntimeError('Receiver SSH connection closed. Reconnect Herdr to restore drag.')
     finally:
         stop.set()

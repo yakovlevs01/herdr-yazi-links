@@ -5,6 +5,8 @@ Uses only a fresh UUID Herdr session. No server is prestarted: herdr-yazi's
 normal prepare.sh chain must create it. The automated phase substitutes only
 local ripdrag with an argv recorder. --real-ripdrag additionally opens a real
 window, but does not verify a GUI drop into another application.
+--progress-check throttles the real SFTP byte stream to verify rendered Yazi
+progress, completion and persistent errors.
 """
 import argparse
 from collections import Counter
@@ -13,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import pty
+import re
 import shlex
 import shutil
 import socket
@@ -44,6 +47,7 @@ def main():
     parser.add_argument('--remote-root', help='Defaults to ~/pets/herdr-yazi-links on host')
     parser.add_argument('--launcher', type=Path, default=ROOT / 'herdr-yazi')
     parser.add_argument('--output', type=Path, help='Retained logs and downloaded test copies')
+    parser.add_argument('--progress-check', action='store_true', help='Throttle real SFTP and verify progress, ready and persistent error in Yazi')
     parser.add_argument('--real-ripdrag', action='store_true', help='Also launch real GUI, manual drop still required')
     args = parser.parse_args()
     actual_ripdrag = shutil.which('ripdrag')
@@ -68,6 +72,9 @@ other = '01-other\\n雪 `$(touch NOT_EXECUTED)` \\'".txt'
 (tmp/'one').mkdir(); (tmp/'two').mkdir()
 files = [(tmp/'one'/name, 'hover payload\\n'), (tmp/'one'/other, 'selected payload\\n'), (tmp/'two'/name, 'same basename different bytes\\n')]
 for path, content in files: path.write_text(content)
+(tmp/'three').mkdir()
+(tmp/'three'/'00-hover-directory').mkdir()
+(tmp/'three'/'00-hover-progress.bin').write_bytes(b'p' * (4 * 1024 * 1024))
 print(json.dumps({'root':str(root), 'tmp':str(tmp), 'files':[(str(p), c) for p,c in files]}))
 '''
     info = json.loads(remote(fixture_code, args.remote_root or '').stdout)
@@ -82,6 +89,31 @@ with open(os.environ['HERDR_DRAG_SMOKE_ARGV'], 'a') as stream:
     stream.write(json.dumps(sys.argv[1:]) + '\\n')
 ''')
     recorder.chmod(0o755)
+    if args.progress_check:
+        # Only the SFTP subsystem is throttled; broker and Herdr SSH use exec.
+        # File contents still travel over the real OpenSSH SFTP connection.
+        actual_ssh = shutil.which('ssh')
+        wrapper = bindir / 'ssh'
+        wrapper.write_text('#!' + sys.executable + '\n' + 'SSH = ' + repr(actual_ssh) + '\n' + """
+import os, subprocess, sys, time
+if '-s' not in sys.argv[1:] or sys.argv[-1] != 'sftp':
+    os.execv(SSH, [SSH, *sys.argv[1:]])
+process = subprocess.Popen([SSH, *sys.argv[1:]], stdout=subprocess.PIPE)
+try:
+    while True:
+        block = os.read(process.stdout.fileno(), 8192)
+        if not block:
+            break
+        time.sleep(len(block) / (256 * 1024))
+        sys.stdout.buffer.write(block)
+        sys.stdout.buffer.flush()
+finally:
+    process.stdout.close()
+    if process.poll() is None:
+        process.terminate()
+sys.exit(process.wait())
+""")
+        wrapper.chmod(0o755)
     argv_log = tmp / 'ripdrag.jsonl'
     argv_log.touch()
     env = {k: v for k, v in os.environ.items() if not k.startswith('HERDR_')}
@@ -154,12 +186,24 @@ else: raise RuntimeError('Launcher did not create unique remote server socket')
             return pane
         def calls():
             return [json.loads(line) for line in argv_log.read_text().splitlines() if line]
-        def trigger(expected):
+        def trigger(expected, progress_pane=None):
             previous = len(calls())
             os.write(master, b'\x07')
+            if progress_pane is not None:
+                def progressing():
+                    screen = visible(progress_pane)
+                    match = re.search(r'Drag \d+/\d+ (\d+)%', screen)
+                    return screen if match and 0 < int(match[1]) < 100 else None
+                progress_screen = until(progressing, 'rendered intermediate Yazi progress', timeout=30)
+                (tmp / 'progress-pane.txt').write_text(progress_screen)
             recorded = until(lambda: calls()[previous:] or None, 'Ctrl+G download and local ripdrag', timeout=45)[0]
             if recorded[:4] != ['-x', '-a', '-n', '-b']:
                 raise RuntimeError('Unexpected ripdrag flags: ' + repr(recorded))
+            if progress_pane is not None:
+                ready_screen = until(lambda: (screen if 'Drag: ready' in screen else None)
+                                     if (screen := visible(progress_pane)) else None,
+                                     'rendered ready in Yazi', timeout=5)
+                (tmp / 'ready-pane.txt').write_text(ready_screen)
             files = [Path(path) for path in recorded[4:]]
             received = Counter((p.name, p.read_text()) for p in files)
             wanted = Counter((Path(path).name, content) for path, content in expected)
@@ -180,17 +224,41 @@ else: raise RuntimeError('Launcher did not create unique remote server socket')
         (tmp / 'selected-pane.txt').write_text(visible(pane))
         trigger([first, second])
         print('PASS multiselection, Unicode, quotes, newline and shell punctuation', flush=True)
+        time.sleep(4)  # Allow the completed progress task's three-second display to end.
         api('pane.send_keys', {'pane_id': pane, 'keys': ['q']})
         until(lambda: all(p['pane_id'] != pane for p in panes()), 'first Yazi exit')
-        open_yazi(duplicate[0])
+        pane = open_yazi(duplicate[0])
         trigger([duplicate])
         if copied[0] == copied[-1] or copied[0].read_text() == copied[-1].read_text():
             raise RuntimeError('Duplicate basename overwrote prior copy')
         print('PASS repeated basename preserves earlier copy after ripdrag exit', flush=True)
+        if args.progress_check:
+            time.sleep(4)
+            api('pane.send_keys', {'pane_id': pane, 'keys': ['q']})
+            until(lambda: all(p['pane_id'] != pane for p in panes()), 'duplicate Yazi exit')
+            slow = str(Path(remote_tmp) / 'three/00-hover-progress.bin')
+            pane = open_yazi(slow)
+            trigger([(slow, 'p' * (4 * 1024 * 1024))], progress_pane=pane)
+            print('PASS rendered intermediate progress and ready after complete download', flush=True)
+            # The fixture directory sorts first; gg selects it.
+            os.write(master, b'gg')
+            time.sleep(0.3)
+            previous = len(calls())
+            os.write(master, b'\x07')
+            error_screen = until(lambda: (screen if 'Drag error:' in screen else None)
+                                 if (screen := visible(pane)) else None,
+                                 'directory rejection rendered in Yazi')
+            (tmp / 'error-pane.txt').write_text(error_screen)
+            time.sleep(3.5)
+            if 'Drag error:' not in visible(pane) or len(calls()) != previous:
+                raise RuntimeError('Directory error disappeared or launched ripdrag')
+            print('PASS directory rejection persists in Yazi without launching ripdrag', flush=True)
         remote_verify = '''import json, pathlib, sys
 info=json.loads(sys.argv[1])
 for path, content in info['files']:
     assert pathlib.Path(path).read_text()==content
+assert (pathlib.Path(info['tmp'])/'three'/'00-hover-progress.bin').read_bytes() == b'p' * (4 * 1024 * 1024)
+assert (pathlib.Path(info['tmp'])/'three'/'00-hover-directory').is_dir()
 assert not list(pathlib.Path(info['tmp']).rglob('NOT_EXECUTED'))
 '''
         remote(remote_verify, json.dumps(info))
@@ -204,7 +272,7 @@ assert not list(pathlib.Path(info['tmp']).rglob('NOT_EXECUTED'))
                 raise RuntimeError('Real ripdrag exited before GUI check: ' + str(gui.returncode))
             print('PASS real ripdrag process started, PID ' + str(gui.pid) + '; GUI drop requires manual verification', flush=True)
         (tmp / 'result.json').write_text(json.dumps({'host': args.remote, 'session': session,
-            'automated': 'passed', 'gui_drop': 'not tested', 'copies': list(map(str, copied))}, indent=2))
+            'automated': 'passed', 'progress_ui': 'passed' if args.progress_check else 'not tested', 'gui_drop': 'not tested', 'copies': list(map(str, copied))}, indent=2))
     except Exception:
         if (tmp / 'cache/receiver.log').exists():
             sys.stderr.write((tmp / 'cache/receiver.log').read_text()[-4000:] + '\n')

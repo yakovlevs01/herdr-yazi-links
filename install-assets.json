@@ -1,0 +1,22 @@
+{
+  "herdr": {
+    "linux-x86_64": {
+      "url": "https://github.com/yakovlevs01/herdr-yazi-links/releases/download/v0.4.0/herdr-linux-x86_64",
+      "sha256": "c742923a3a0875a53f2d44b2a44c45bef65925ec12e01f440e3d085ab64744ef"
+    },
+    "macos-aarch64": {
+      "url": "https://github.com/yakovlevs01/herdr-yazi-links/releases/download/v0.4.0/herdr-macos-aarch64",
+      "sha256": "805f9bba8668f902fbf4e8ded9adcc768824faead2df90c9107aa464a568821d"
+    }
+  },
+  "yazi": {
+    "linux-x86_64": {
+      "url": "https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-x86_64-unknown-linux-musl.zip",
+      "sha256": "9b9c39decccf8cb0ff53a7d637d38f8a79d93bbd0099f4ea9c619ef6bb392f5d"
+    },
+    "macos-aarch64": {
+      "url": "https://github.com/sxyazi/yazi/releases/download/v26.9.1/yazi-aarch64-apple-darwin.zip",
+      "sha256": "3921182a21cceb0a505e5dac578e1487d48104caa5f114e9f8adf40b5a7289a9"
+    }
+  }
+}

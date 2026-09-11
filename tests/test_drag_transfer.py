@@ -52,9 +52,9 @@ class TransferTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.cache = Path(self.temp.name) / 'cache'
 
-    def download(self, fake, paths, progress=None):
+    def download(self, fake, paths, progress=None, batch_progress=None):
         with patch.object(transfer, 'open_sftp', return_value=contextlib.nullcontext(fake)):
-            return transfer.download('my-host', paths, self.cache, progress)
+            return transfer.download('my-host', paths, self.cache, progress, batch_progress)
 
     def test_special_names_duplicates_empty_file_and_progress(self):
         names = ['/one/a \"\' $`*?;\n雪.txt', '/two/a \"\' $`*?;\n雪.txt', '/empty']
@@ -69,6 +69,29 @@ class TransferTests(unittest.TestCase):
         self.assertEqual(list(self.cache.glob('.partial-*')), [])
         self.assertTrue((result[0].parents[1] / '.complete').exists())
         self.assertEqual(stat.S_IMODE(result[0].stat().st_mode), 0o600)
+
+    def test_batch_progress_has_known_total_and_never_claims_ready(self):
+        fake = FakeSFTP({'/one': b'a' * 150000, '/two': b'b' * 50000})
+        updates = []
+        self.download(fake, ['/one', '/two'], batch_progress=updates.append)
+        self.assertTrue(all(u['bytes_total'] == 200000 for u in updates))
+        self.assertTrue(all(u['file_count'] == 2 for u in updates))
+        self.assertEqual(updates[0]['bytes_done'], 0)
+        self.assertEqual(updates[-1]['bytes_done'], 200000)
+        self.assertEqual(updates[-1]['file_index'], 2)
+        self.assertEqual(updates[-1]['percent'], 99)
+        self.assertEqual([u['bytes_done'] for u in updates],
+                         sorted(u['bytes_done'] for u in updates))
+
+    def test_incomplete_batch_never_emits_success(self):
+        fake = FakeSFTP({'/one': b'first', '/two': b'short'})
+        fake.sizes['/two'] = 10
+        updates = []
+        with self.assertRaisesRegex(transfer.TransferError, 'incomplete'):
+            self.download(fake, ['/one', '/two'], batch_progress=updates.append)
+        self.assertTrue(updates)
+        self.assertTrue(all(u['percent'] < 100 for u in updates))
+        self.assertEqual(list(self.cache.iterdir()), [])
 
     def test_directory_symlink_fifo_rejected_before_open(self):
         for mode in [stat.S_IFDIR, stat.S_IFLNK, stat.S_IFIFO]:

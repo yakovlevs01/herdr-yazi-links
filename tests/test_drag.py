@@ -203,6 +203,64 @@ class BrokerTests(unittest.TestCase):
             time.sleep(0.02)
         self.assertEqual(json.loads(result.stdout), feedback)
 
+    def start_watch(self, job_id):
+        process = subprocess.Popen(
+            [sys.executable, str(ROOT / 'drag.py'), 'watch', job_id],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=dict(self.env, HERDR_SESSION=self.session), bufsize=0)
+        self.addCleanup(self.stop, process)
+        return process
+
+    def test_watch_isolates_queued_jobs_and_finishes_on_terminal_feedback(self):
+        broker = self.start()
+        self.read(broker)
+        first = self.request({'paths': ['/first']})['id']
+        self.read(broker)
+        second = self.request({'paths': ['/second']})['id']
+        self.read(broker)
+        watcher = self.start_watch(first)
+        queued = self.read(watcher)
+        self.assertEqual(queued['state'], 'queued')
+        self.assertEqual(queued['percent'], 0)
+        broker.stdin.write(drag.packet({'id': second, 'state': 'downloading', 'percent': 45}))
+        self.assertFalse(select.select([watcher.stdout], [], [], 0.4)[0])
+        broker.stdin.write(drag.packet({'id': first, 'state': 'downloading', 'percent': 99,
+                                       'bytes_done': 10, 'bytes_total': 10}))
+        progress = self.read(watcher)
+        self.assertEqual(progress['percent'], 99)
+        self.assertEqual(progress['file_count'], 1)
+        broker.stdin.write(drag.packet({'id': first, 'state': 'done', 'percent': 100}))
+        self.assertEqual(self.read(watcher)['state'], 'done')
+        watcher.wait(timeout=2)
+        self.assertEqual(watcher.returncode, 0)
+        with patch.dict(os.environ, self.env, clear=True):
+            second_state = json.loads(drag.job_path(self.locations()[0], second).read_text())
+        self.assertEqual(second_state['percent'], 45)
+
+    def test_watch_disconnect_and_receiver_replacement_do_not_hang_or_replay(self):
+        first = self.start()
+        self.read(first)
+        job = self.request({'paths': ['/file']})['id']
+        self.read(first)
+        watcher = self.start_watch(job)
+        self.assertEqual(self.read(watcher)['state'], 'queued')
+        # Even SIGKILL leaves a stale socket; lock ownership is the liveness check.
+        first.kill()
+        first.wait(timeout=2)
+        second = self.start()
+        self.read(second)
+        error = self.read(watcher)
+        self.assertEqual(error['state'], 'error')
+        self.assertIn('disconnected', error['message'])
+        watcher.wait(timeout=2)
+        self.assertFalse(select.select([second.stdout], [], [], 0.2)[0])
+
+    def test_watch_rejects_unknown_ids_and_path_traversal(self):
+        for job_id in ['../status', 'job', '0' * 32]:
+            result = self.cli('watch', job_id)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('transfer id', result.stderr)
+
 
 class LocalTests(unittest.TestCase):
     def test_local_fallback_keeps_ripdrag_options_and_literal_arguments(self):

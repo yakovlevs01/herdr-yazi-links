@@ -5,6 +5,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import select
 import socket
@@ -57,6 +58,49 @@ def packet(value):
     return (json.dumps(value, ensure_ascii=True) + '\n').encode()
 
 
+def atomic_json(path, value):
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_bytes(packet(value))
+    temporary.replace(path)
+
+
+def job_path(state, job_id):
+    if not isinstance(job_id, str) or not re.fullmatch(r'[0-9a-f]{32}', job_id):
+        raise ValueError('Invalid transfer id')
+    return state / ('job-' + job_id + '.json')
+
+
+def watch(job_id, session=None):
+    """Stream one transfer, including a terminal error when its receiver is gone."""
+    state, _ = locations(session or session_name())
+    path = job_path(state, job_id)
+    if not path.exists():
+        raise ValueError('Unknown transfer id')
+    previous = None
+    while True:
+        value = json.loads(path.read_text())
+        if value.get('state') not in ('done', 'error'):
+            online = False
+            with (state / 'receiver.lock').open('a+') as lock:
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    online = True
+                else:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+            receiver = state / 'receiver.json'
+            current = json.loads(receiver.read_text()) if receiver.exists() else {}
+            if not online or current.get('receiver') != value.get('receiver'):
+                value = dict(value, state='error', level='error',
+                             message='Receiver disconnected. Reconnect Herdr and submit again.')
+        if value != previous:
+            yield value
+            previous = value
+        if value.get('state') in ('done', 'error'):
+            return
+        time.sleep(0.2)
+
+
 def serve(session, owner):
     state, address = locations(session)
     with (state / 'receiver.lock').open('a+') as lock:
@@ -72,6 +116,7 @@ def serve(session, owner):
             os.chmod(address, 0o600)
             listener.listen(8)
             token = uuid.uuid4().hex
+            atomic_json(state / 'receiver.json', {'receiver': token, 'owner': owner})
             sys.stdout.buffer.write(packet({'ready': token, 'owner': owner}))
             sys.stdout.buffer.flush()
             last = time.monotonic()
@@ -91,7 +136,17 @@ def serve(session, owner):
                             line, buffered = buffered.split(b'\n', 1)
                             feedback = json.loads(line)
                             if feedback != {'heartbeat': True}:
-                                (state / 'status.json').write_text(json.dumps(feedback, ensure_ascii=True))
+                                atomic_json(state / 'status.json', feedback)
+                                try:
+                                    path = job_path(state, feedback.get('id'))
+                                except ValueError:
+                                    continue  # Legacy feedback remains visible through status.
+                                if path.exists():
+                                    previous = json.loads(path.read_text())
+                                    if previous.get('receiver') == token and previous.get('state') not in ('done', 'error'):
+                                        update = dict(previous, **feedback)
+                                        update['receiver'] = token
+                                        atomic_json(path, update)
                     if listener in ready:
                         with listener.accept()[0] as client:
                             client.settimeout(2)
@@ -100,6 +155,14 @@ def serve(session, owner):
                                     value = json.loads(stream.readline(LIMIT + 1))
                                 paths = validate(value)
                                 job = {'id': uuid.uuid4().hex, 'receiver': token, 'paths': paths}
+                                queued = {
+                                    'id': job['id'], 'receiver': token, 'state': 'queued',
+                                    'file_index': 0, 'file_count': len(paths),
+                                    'bytes_done': 0, 'bytes_total': None, 'percent': 0,
+                                    'message': 'Queued for ' + owner,
+                                }
+                                atomic_json(job_path(state, job['id']), queued)
+                                atomic_json(state / 'status.json', queued)
                                 sys.stdout.buffer.write(packet(job))
                                 sys.stdout.buffer.flush()
                                 client.sendall(packet({'message': 'Queued for ' + owner, 'id': job['id']}))
@@ -143,6 +206,8 @@ def main():
     broker.add_argument('owner')
     send = sub.add_parser('submit')
     send.add_argument('paths', nargs='+')
+    watcher = sub.add_parser('watch')
+    watcher.add_argument('id')
     status = sub.add_parser('status')
     status.add_argument('session', nargs='?', default=session_name())
     args = parser.parse_args()
@@ -150,6 +215,9 @@ def main():
         serve(args.session, args.owner)
     elif args.command == 'submit':
         print(json.dumps(submit(args.paths)))
+    elif args.command == 'watch':
+        for value in watch(args.id):
+            print(json.dumps(value), flush=True)
     else:
         state, _ = locations(args.session)
         print((state / 'status.json').read_text() if (state / 'status.json').exists() else '{"message":"No transfer status"}')

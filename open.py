@@ -7,7 +7,25 @@ from pathlib import Path
 import shutil
 import socket
 import sys
+import re
+import subprocess
 from urllib.parse import unquote, urlsplit
+
+ROOT = Path(__file__).resolve().parent
+
+
+def yazi_command():
+    managed = ROOT / '.build/yazi/bin/yazi'
+    if managed.is_file() and os.access(managed, os.X_OK):
+        try:
+            result = subprocess.run(['yazi', '--version'], capture_output=True, text=True, timeout=5)
+            match = re.search(r'\b(\d+)\.(\d+)\.(\d+)', result.stdout)
+            version = tuple(map(int, match.groups())) if match else ()
+            if result.returncode != 0 or not (version >= (26, 5, 6) and version < (27,)):
+                return str(managed)
+        except (OSError, subprocess.TimeoutExpired):
+            return str(managed)
+    return 'yazi'
 
 
 def file_path(uri):
@@ -37,7 +55,7 @@ def request(method, params):
 
 def click():
     path = file_path(os.environ["HERDR_PLUGIN_CLICKED_URL"])
-    if shutil.which("yazi") is None:
+    if shutil.which("yazi") is None and not (ROOT / '.build/yazi/bin/yazi').is_file():
         raise RuntimeError("yazi отсутствует в PATH сервера Herdr")
     context = json.loads(os.environ["HERDR_PLUGIN_CONTEXT_JSON"])
     pane_id = context["focused_pane_id"]
@@ -59,7 +77,8 @@ def main():
     elif sys.argv[1:] == ["run"]:
         # argv, not shell source: punctuation in a filename cannot execute code.
         path = os.environ["YAZI_LINK_PATH"]
-        os.execvp("yazi", ["yazi", path])
+        command = yazi_command()
+        os.execvp(command, [command, path])
     else:
         raise ValueError("Usage: open.py click|run")
 

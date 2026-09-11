@@ -12,6 +12,20 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = re.compile(r"(?m)^[ \t]*\[\[?[^\n]*?\]\]?[ \t]*(?:#[^\n]*)?$")
 BINDING = '\n[[mgr.prepend_keymap]]\non = "<C-g>"\nrun = "plugin herdr-drag"\ndesc = "Send files to local ripdrag"\n'
+INIT_BEGIN = '-- BEGIN herdr-yazi-links progress'
+INIT_END = '-- END herdr-yazi-links progress'
+INIT_BLOCK = INIT_BEGIN + '\nrequire("herdr-drag"):setup()\n' + INIT_END
+
+
+def update_init(source):
+    if source.count(INIT_BEGIN) != source.count(INIT_END) or source.count(INIT_BEGIN) > 1:
+        raise ValueError('Invalid managed herdr-drag block in init.lua; configuration was not changed')
+    if INIT_BEGIN in source:
+        start, end = source.index(INIT_BEGIN), source.index(INIT_END) + len(INIT_END)
+        if end < start:
+            raise ValueError('Invalid managed herdr-drag block order in init.lua')
+        return source[:start] + INIT_BLOCK + source[end:]
+    return source + ('\n' if source and not source.endswith('\n') else '') + INIT_BLOCK + '\n'
 
 
 def update_keymap(source):
@@ -85,6 +99,9 @@ def install(config_dir, root=ROOT):
     keymap = config_dir / 'keymap.toml'
     source = keymap.read_text(encoding='utf-8') if keymap.exists() else ''
     updated = update_keymap(source)
+    init = config_dir / 'init.lua'
+    init_source = init.read_text(encoding='utf-8') if init.exists() else ''
+    init_updated = update_init(init_source)
     template = (ROOT / 'yazi/herdr-drag.yazi/main.lua').read_text(encoding='utf-8')
     plugin = template.replace('"@HERDR_DRAG_HELPER@"', lua_string(str((root / 'drag.py').resolve())))
     backup = None
@@ -96,6 +113,10 @@ def install(config_dir, root=ROOT):
         atomic_write(destination, plugin)
     if source != updated:
         atomic_write(keymap, updated)
+    if init_source != init_updated:
+        if init.exists():
+            shutil.copy2(init, init.with_name('init.lua.herdr-drag-backup-' + str(time.time_ns())))
+        atomic_write(init, init_updated)
     return destination, backup
 
 

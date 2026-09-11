@@ -124,7 +124,7 @@ class ReceiverTests(unittest.TestCase):
                 if not failed.wait(timeout=3):
                     raise AssertionError('Worker never attempted download')
                 return b''
-        def fail_download(*args):
+        def fail_download(*args, **kwargs):
             failed.set()
             raise RuntimeError('incomplete SFTP transfer')
         with tempfile.TemporaryDirectory() as cache:
@@ -142,6 +142,59 @@ class ReceiverTests(unittest.TestCase):
             self.assertEqual(download.call_args.args[1], paths)
             self.assertEqual(spawn.call_count, 1, 'Failed downloads must not launch ripdrag')
             self.assertIn('incomplete SFTP transfer', (Path(cache) / 'receiver.log').read_text())
+
+    def test_progress_reaches_100_only_after_ripdrag_launch(self):
+        for exit_code in (None, 2):
+            with self.subTest(ripdrag_exit=exit_code), tempfile.TemporaryDirectory() as cache:
+                finished = threading.Event()
+                frames = []
+                job = {'paths': ['/one', '/two'], 'receiver': 'token', 'id': 'a' * 32}
+                packets = [client.packet({'ready': 'token'}), client.packet(job)]
+                class Input(io.BytesIO):
+                    def write(self, data):
+                        frame = json.loads(data)
+                        frames.append(frame)
+                        if frame.get('state') in ('done', 'error'):
+                            finished.set()
+                        return super().write(data)
+                class Output:
+                    def close(self):
+                        pass
+
+                    def readline(self, limit):
+                        if packets:
+                            return packets.pop(0)
+                        if not finished.wait(timeout=3):
+                            raise AssertionError('Worker did not finish')
+                        return b''
+                def download(host, paths, directory, batch_progress):
+                    batch_progress({'file_index': 2, 'file_count': 2,
+                                    'bytes_done': 12, 'bytes_total': 12, 'percent': 99})
+                    self.assertFalse(any(f.get('percent') == 100 for f in frames))
+                    return [Path(cache) / 'transfer-test/0000/one',
+                            Path(cache) / 'transfer-test/0001/two']
+                ssh = Mock(stdout=Output(), stdin=Input())
+                window = Mock(returncode=exit_code)
+                window.poll.return_value = exit_code
+                with patch.dict(os.environ, {'HERDR_DRAG_CACHE': cache}), \
+                        patch.object(sys, 'argv', ['drag-client.py', 'host', 'session']), \
+                        patch.object(client.shutil, 'which', return_value='/bin/ripdrag'), \
+                        patch.object(client.subprocess, 'Popen', side_effect=[ssh, window]), \
+                        patch.object(client.select, 'select', return_value=([ssh.stdout], [], [])), \
+                        patch.object(client, 'download', side_effect=download), patch('builtins.print'):
+                    with self.assertRaisesRegex(RuntimeError, 'SSH connection closed'):
+                        client.main()
+                logged = [json.loads(line) for line in (Path(cache) / 'receiver.log').read_text().splitlines()]
+                self.assertTrue(any(item.get('bytes_done') == 12 and item.get('percent') == 99 for item in logged))
+                terminal = [f for f in frames if f.get('state') in ('done', 'error')]
+                self.assertEqual(len(terminal), 1)
+                if exit_code is None:
+                    self.assertEqual(terminal[0]['state'], 'done')
+                    self.assertEqual(terminal[0]['percent'], 100)
+                    self.assertEqual(terminal[0]['bytes_done'], 12)
+                else:
+                    self.assertEqual(terminal[0]['state'], 'error')
+                    self.assertFalse(any(f.get('percent') == 100 for f in frames))
 
 
 if __name__ == '__main__':

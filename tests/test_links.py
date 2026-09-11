@@ -49,3 +49,19 @@ class YaziLinksTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ManagedYaziTests(unittest.TestCase):
+    def test_managed_binary_is_fallback_without_path_reordering(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / '.build/yazi/bin/yazi'
+            binary.parent.mkdir(parents=True)
+            binary.write_text('fixture')
+            binary.chmod(0o755)
+            with patch.object(links, 'ROOT', root):
+                for version, expected in [('Yazi 25.5.31', str(binary)), ('Yazi 26.9.1', 'yazi')]:
+                    with patch.object(links.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, version)):
+                        self.assertEqual(links.yazi_command(), expected)
+                with patch.object(links.subprocess, 'run', side_effect=FileNotFoundError):
+                    self.assertEqual(links.yazi_command(), str(binary))

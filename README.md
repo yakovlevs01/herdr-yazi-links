@@ -4,6 +4,16 @@ Ctrl-click a file hyperlink in Herdr to open Yazi beside the source pane, with t
 
 [Русский](README.ru.md) · [Plugin installation](docs/plugin.md) · [Optional patched Herdr](docs/patched-herdr.md)
 
+## Install everything on this computer
+
+```sh
+git clone https://github.com/yakovlevs01/herdr-yazi-links.git ~/pets/herdr-yazi-links
+cd ~/pets/herdr-yazi-links
+./install.sh
+```
+
+This installs the pinned patched Herdr, Yazi plugin, Ctrl+G with progress in Yazi, ripdrag and download dependencies. No agent or manual configuration edits are needed. Missing system packages may require sudo. See the [installation guide](docs/install.md). Use `./install.sh --check` to verify an installation.
+
 ## Choose what you need
 
 | Mode | Clickable input | Installation |

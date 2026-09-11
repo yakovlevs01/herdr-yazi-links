@@ -12,6 +12,8 @@ In remote Yazi, select files or leave one under the cursor and press Ctrl+G. The
 
 ## Install
 
+The [single installer](install.md), `./install.sh`, handles all steps below on the current machine, including progress initialization. The separate helpers remain available for targeted setup.
+
 The remote checkout must be `~/pets/herdr-yazi-links`, as for existing remote preparation. Sender runtime needs Python 3.9+, Yazi 26.x and OpenSSH with SFTP. It needs neither ripdrag nor Paramiko.
 
 Install the Yazi binding on each machine where you run Yazi, using Python 3.11+:
@@ -28,7 +30,7 @@ On each receiving computer, install ripdrag and run:
 sh scripts/install-drag-receiver.sh
 ```
 
-This installs Paramiko in `.build/drag-venv`. Its presence enables the receiver in `herdr-yazi --remote`. Existing user PATH priority stays intact. SSH host aliases, keys, ProxyJump and known-host checks use system OpenSSH. Authenticate and accept the host key with ordinary SSH first; background connections use BatchMode. The tested receiver is Linux with a graphical session and ripdrag in PATH. macOS and Ubuntu hosts can send without GTK or ripdrag; receiving there requires a working local ripdrag installation and has not been verified.
+This installs Paramiko in `.build/drag-venv`. Its presence enables the receiver in `herdr-yazi --remote`. Existing user PATH priority stays intact. SSH host aliases, keys, ProxyJump and known-host checks use system OpenSSH. Authenticate and accept the host key with ordinary SSH first; background connections use BatchMode. The tested receiver is Linux with a graphical session and ripdrag in PATH. macOS and Ubuntu hosts can send without GTK or ripdrag. The full installer also installs the receiver and builds ripdrag on macOS; a receiving desktop needs a graphical session.
 
 Ordinary local Yazi keeps `shell -- ripdrag -x -a -n -b %s`. The plugin also supports a local Herdr session through literal argv with the same ripdrag flags. `%s` is Yazi 26's selected-or-hovered expansion; it is not replaced with the older `$@` convention.
 
@@ -48,7 +50,7 @@ Only regular files are supported remotely. Selecting a directory, a final symbol
 
 Each batch downloads to a private `.partial-*` directory, then becomes a `transfer-*` directory only after every file succeeds. Indexed subdirectories preserve identical basenames. UTF-8, spaces, quotes, newlines and shell punctuation are supported. Non-UTF-8 names are rejected. Originals are never deleted or synchronized back. A normal transfer failure removes the incomplete batch; an abrupt process or machine crash can leave a `.partial-*` directory, which is never handed to ripdrag.
 
-Yazi shows request acceptance or connection errors. The receiver sends no system notifications. Full byte progress and ripdrag errors are in `~/.cache/herdr-yazi-drag/receiver.log`. On the server:
+Yazi shows a progress line in its status bar: queued state, file count, aggregate percentage and, when there is space, a bar and byte totals. Each request has its own status; simultaneous requests cannot overwrite each other. Success appears for three seconds, errors remain until the next request. Closing Yazi during a running plugin task uses Yazi's normal unfinished-task confirmation. The receiver sends no system notifications. Full byte progress and ripdrag errors are in `~/.cache/herdr-yazi-drag/receiver.log`. On the server:
 
 ```sh
 python3 ~/pets/herdr-yazi-links/drag.py status yazi-links
@@ -67,3 +69,5 @@ Cleanup removes only completed batches older than the specified age. It does not
 `python3 -m unittest discover -s tests -v` covers broker requests, ownership, reconnects, errors, transfer completion, cache cleanup and installer behavior. `scripts/drag-smoke.py --remote HOST` exercises the actual launcher, a new remote session, Yazi key input and downloaded bytes with a recording ripdrag substitute. A process launch check is separate from an actual GUI drop into another application.
 
 The queue/receiver separation is similar to [yazi-ssh.yazi](https://github.com/affromero/yazi-ssh.yazi), which wraps SSH itself. [drag.yazi](https://github.com/Joao-Queiroga/drag.yazi) handles local drag. This module uses [ripdrag](https://github.com/nik012003/ripdrag) locally and adds session ownership around Herdr's existing remote launch. It needs no additional Herdr binary patch.
+
+Use `python3 scripts/drag-smoke.py --remote HOST --progress-check` to verify intermediate percentages and persistent errors in real Yazi with throttled SFTP.

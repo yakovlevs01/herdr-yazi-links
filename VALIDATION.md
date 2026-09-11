@@ -58,3 +58,16 @@ Retained repeat-run evidence on the test desktop:
 An additional real local ripdrag process started successfully with a downloaded macOS file and remained running after one second. This is a process launch check, not proof of a successful GUI drag-and-drop into another application. GUI drop remains unverified. The existing OSC 8/plain-path click smoke also passed through the launcher against macOS with server keybindings.
 
 Unit/integration tests cover JSON schema and size boundaries, aborted request sockets, session routing, exclusive receiver conflicts, heartbeat expiry, reconnect without replay, receiver/launcher failure and SIGTERM cleanup, literal local ripdrag argv, SFTP errors and incomplete-batch cleanup, manual cache cleanup, and preservation of user keymaps. Remote sender configurations were installed on both hosts; local sender and receiver were installed on the desktop. The remote hosts do not have ripdrag and were tested as senders, not GUI receivers. Existing working Herdr sessions were neither stopped nor restarted.
+
+## 0.4.0 progress and unified installation
+
+The single `./install.sh` completed on the Linux desktop and macOS ARM64. On macOS it installed Python 3.13, GTK4, built ripdrag 0.4.12, created the Paramiko environment, and configured the Lua plugin. Ubuntu passed `./install.sh --sender-only`; its GUI receiver was not installed because that host is used as the sender in these checks. The installer supports a full Ubuntu install with the user's sudo password for missing GTK development packages.
+
+Both hosts passed `scripts/drag-smoke.py --remote HOST --progress-check`. This uses the real launcher and Ctrl+G in real Yazi, throttles OpenSSH SFTP to make a 4 MiB transfer observable, and verifies an intermediate percentage in the rendered status line, completion, and a persistent directory error without starting ripdrag. Remote originals and retained downloaded copies were checked. Only UUID test sessions were stopped.
+
+Evidence on the desktop:
+
+- Ubuntu: `/tmp/herdr-drag-smoke-nhxa_m9o/`, including `progress-pane.txt`, `ready-pane.txt`, `error-pane.txt`.
+- macOS: `/tmp/herdr-drag-smoke-5dr0w8o1/`, with the same captures.
+
+These checks verify the terminal progress display and transfer/launch path, not a GUI drop into another application. No system notification is used. Herdr binaries remain the previously tested pinned build; Yazi progress uses its Lua API. Release installation CI downloads the published artifacts into a fresh Ubuntu runner, executes the full installer twice, checks configuration, and exercises real patched Herdr/Yazi clicks in an isolated session.

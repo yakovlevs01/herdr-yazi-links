@@ -4,6 +4,16 @@ Ctrl+клик по файловой гиперссылке в Herdr открыв
 
 [English](README.md) · [Установка плагина](docs/plugin.ru.md) · [Herdr с дополнительным патчем](docs/patched-herdr.ru.md)
 
+## Установить всё на этот компьютер
+
+```sh
+git clone https://github.com/yakovlevs01/herdr-yazi-links.git ~/pets/herdr-yazi-links
+cd ~/pets/herdr-yazi-links
+./install.sh
+```
+
+Скрипт установит закреплённый Herdr с патчем, плагин Yazi, Ctrl+G со строкой прогресса в Yazi, ripdrag и зависимости скачивания. Агент и ручная правка настроек не нужны. Для недостающих системных пакетов может понадобиться пароль sudo. Подробнее в [инструкции установки](docs/install.ru.md). Проверка готовности: `./install.sh --check`.
+
 ## Выбери нужный режим
 
 | Режим | По чему можно кликнуть | Что установить |

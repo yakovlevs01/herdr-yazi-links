@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Add progress in the Yazi status bar through its Lua API: aggregate bytes, percent, file count, persistent errors and brief completion state. No system notifications or new binary patches.
+- Track progress per request, stream updates asynchronously, and detect receiver disconnects without stale replay.
+- Add `./install.sh` for dependencies, verified pinned Herdr/Yazi binaries, ripdrag, receiver, configuration backups, launcher and readiness checks.
+- Preserve existing PATH priority; Herdr panes can use a managed compatible Yazi when the system version is older.
+- Add installer and progress tests, plus a real Yazi/SFTP progress smoke check.
+
+
 ## 0.3.1
 
 - Remove all receiver system notifications. Byte progress and errors remain in the receiver log and remote status.
