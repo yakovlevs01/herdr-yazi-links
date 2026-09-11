@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2
+
+- Start prepared servers in a new OS process session, fixing the SSH disconnect warning.
+- Test actual preparation session IDs and preserve already running servers. Existing servers started by older preparation scripts need a deliberate restart after saving work.
+
 ## 0.2.1
 
 - Forward the original Herdr arguments unchanged, including remote keybindings and future options.

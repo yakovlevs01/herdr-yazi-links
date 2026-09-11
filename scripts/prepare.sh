@@ -10,7 +10,15 @@ PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
 export PATH
 "$binary" --session "$session" plugin link "$plugin_dir" >/dev/null
 if ! "$binary" --session "$session" pane list >/dev/null 2>&1; then
-    nohup "$binary" --session "$session" server >>"$plugin_dir/.build/session-start.log" 2>&1 </dev/null &
+    # nohup alone leaves the server in SSH's process session. Herdr checks SID == PID.
+    python3 - "$binary" "$session" "$plugin_dir/.build/session-start.log" <<'DETACH'
+import subprocess, sys
+binary, session, logfile = sys.argv[1:]
+with open(logfile, 'ab') as log:
+    subprocess.Popen([binary, '--session', session, 'server'],
+                     stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                     start_new_session=True, close_fds=True)
+DETACH
     attempt=0
     until "$binary" --session "$session" pane list >/dev/null 2>&1; do
         attempt=$((attempt + 1))

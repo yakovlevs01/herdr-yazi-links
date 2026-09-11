@@ -35,3 +35,7 @@ Run the command in `docs/remote.md` to repeat these checks against your host. Pu
 ## 0.2.1 launcher arguments
 
 The SSH smoke test also passed using the actual `herdr-yazi` launcher as the client with `--remote-keybindings server` against macOS ARM64. Launcher regression tests cover unchanged argv, flags in different positions, equals syntax, unknown future flags, explicit sessions, literal arguments after `--`, no SSH for help/version, and exit status propagation.
+
+## 0.2.2 daemon preparation
+
+The earlier remote smoke used `start_new_session=True` directly and therefore missed the preparation helper’s `nohup`-only startup. A dedicated preparation test now checks SID == PID and verifies that an existing server is not restarted. On both macOS ARM64 and Linux x86_64, fresh UUID sessions started through the actual helper report `capabilities.detached_server_daemon: true`. Existing working sessions were left untouched.
