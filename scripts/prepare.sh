@@ -6,7 +6,7 @@ binary="$plugin_dir/.build/bin/herdr"
 session=${1:-yazi-links}
 unset HERDR_SOCKET_PATH HERDR_CLIENT_SOCKET_PATH HERDR_ENV
 unset HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID
-PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+PATH="${PATH:-/usr/bin:/bin}:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
 export PATH
 "$binary" --session "$session" plugin link "$plugin_dir" >/dev/null
 if ! "$binary" --session "$session" pane list >/dev/null 2>&1; then

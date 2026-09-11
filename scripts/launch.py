@@ -14,6 +14,7 @@ def preparation(args, default_session):
     session = default_session
     pending = None
     help_requested = False
+    remote_count = 0
     for arg in args:
         if pending:
             if pending == 'remote':
@@ -23,20 +24,57 @@ def preparation(args, default_session):
             pending = None
         elif arg == '--':
             break
-        elif arg in ('--help', '-h', '--version', '-V'):
+        elif arg in ('--help', '-h', '--version', '-V', '--default-config', '--skill'):
             help_requested = True
         elif arg == '--remote':
+            remote_count += 1
             pending = 'remote'
         elif arg == '--session':
             pending = 'session'
         elif arg.startswith('--remote='):
+            remote_count += 1
             remote = arg.partition('=')[2]
         elif arg.startswith('--session='):
             session = arg.partition('=')[2]
     # Let Herdr diagnose malformed flags, and never contact SSH for help/version.
-    if pending or help_requested or not remote or remote.startswith('-'):
+    if pending or help_requested or remote_count != 1 or not remote or remote.startswith('-'):
         return None
     return remote, session
+
+
+def has_subcommand(args):
+    """Distinguish pane/agent/etc. commands without restricting future CLI flags."""
+    pending = False
+    for arg in args:
+        if pending:
+            pending = False
+        elif arg == '--':
+            break
+        elif arg in ('--session', '--remote', '--remote-keybindings'):
+            pending = True
+        elif not arg.startswith('-'):
+            return True
+    return False
+
+
+def launch_environment(args, source):
+    env = dict(source)
+    # Commands inside a pane must retain its socket, session and --current IDs.
+    # Only an application attach starts outside the calling pane's context.
+    remote_attach = bool(args and args[0].startswith('-') and preparation(args, 'yazi-links'))
+    if remote_attach or not has_subcommand(args):
+        if env.get('HERDR_SOCKET_PATH') or env.get('HERDR_ENV') == '1':
+            env.pop('HERDR_SESSION', None)
+        for key in ('HERDR_SOCKET_PATH', 'HERDR_CLIENT_SOCKET_PATH', 'HERDR_ENV',
+                    'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'HERDR_TAB_ID'):
+            env.pop(key, None)
+    env.setdefault('HERDR_SESSION', 'yazi-links')
+    paths = env.get('PATH', '').split(os.pathsep)
+    for fallback in (str(Path.home() / '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin'):
+        if fallback not in paths:
+            paths.append(fallback)
+    env['PATH'] = os.pathsep.join(paths)
+    return env
 
 
 def main():
@@ -44,14 +82,8 @@ def main():
     binary = ROOT / '.build/bin/herdr'
     if not os.access(binary, os.X_OK):
         raise SystemExit('Build Herdr first: ' + str(ROOT / 'build.sh'))
-    env = dict(os.environ)
-    for key in ('HERDR_SOCKET_PATH', 'HERDR_CLIENT_SOCKET_PATH', 'HERDR_ENV',
-                'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'HERDR_TAB_ID'):
-        env.pop(key, None)
-    # Keep the established isolated default without inserting CLI arguments.
-    env['HERDR_SESSION'] = 'yazi-links'
-    env['PATH'] = str(Path.home() / '.local/bin') + ':/opt/homebrew/bin:/usr/local/bin:' + env.get('PATH', '')
-    setup = preparation(args, env['HERDR_SESSION'])
+    env = launch_environment(args, os.environ)
+    setup = None if args and not args[0].startswith('-') else preparation(args, env['HERDR_SESSION'])
     if setup:
         host, session = setup
         command = 'exec "$HOME/pets/herdr-yazi-links/scripts/prepare.sh" ' + shlex.quote(session)

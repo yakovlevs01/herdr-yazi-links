@@ -22,7 +22,7 @@ class LauncherTests(unittest.TestCase):
         helper = '''#!/usr/bin/env python3
 import json, os, sys
 with open(os.environ['CALL_LOG'], 'a') as log:
-    log.write(json.dumps({'argv': [os.path.basename(sys.argv[0]), *sys.argv[1:]], 'session': os.environ.get('HERDR_SESSION')}) + '\\n')
+    log.write(json.dumps({'argv': [os.path.basename(sys.argv[0]), *sys.argv[1:]], 'session': os.environ.get('HERDR_SESSION'), 'socket': os.environ.get('HERDR_SOCKET_PATH'), 'pane': os.environ.get('HERDR_PANE_ID'), 'path': os.environ.get('PATH')}) + '\\n')
 if os.path.basename(sys.argv[0]) == 'ssh':
     sys.exit(int(os.environ.get('SSH_EXIT', '0')))
 sys.exit(int(os.environ.get('HERDR_EXIT', '0')))
@@ -31,7 +31,8 @@ sys.exit(int(os.environ.get('HERDR_EXIT', '0')))
             path.write_text(helper)
             path.chmod(0o755)
         self.log = self.root / 'calls.jsonl'
-        self.env = dict(os.environ, HOME=str(self.root), CALL_LOG=str(self.log))
+        self.env = {key: value for key, value in os.environ.items() if not key.startswith('HERDR_')}
+        self.env.update(HOME=str(self.root), CALL_LOG=str(self.log), PATH=str(self.root / '.local/bin') + os.pathsep + os.environ['PATH'])
 
     def run_launcher(self, args):
         self.log.write_text('')
@@ -70,6 +71,37 @@ sys.exit(int(os.environ.get('HERDR_EXIT', '0')))
                 result, calls = self.run_launcher(args)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual([call['argv'] for call in calls], [['herdr', *args]])
+
+    def test_pane_commands_keep_the_callers_socket_and_ids(self):
+        self.env.update(HERDR_SOCKET_PATH='/tmp/owned.sock', HERDR_ENV='1',
+                        HERDR_PANE_ID='w3:p8', HERDR_SESSION='existing')
+        for args in [['pane', 'current', '--current'], ['agent', 'list'],
+                     ['--session', 'other', 'pane', 'list']]:
+            result, calls = self.run_launcher(args)
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(calls[-1]['socket'], '/tmp/owned.sock')
+            self.assertEqual(calls[-1]['pane'], 'w3:p8')
+            self.assertEqual(calls[-1]['session'], 'existing')
+        _, calls = self.run_launcher([])
+        self.assertIsNone(calls[-1]['socket'])
+        self.assertIsNone(calls[-1]['pane'])
+        self.assertEqual(calls[-1]['session'], 'yazi-links')
+        _, calls = self.run_launcher(['--remote', 'host', '--future', 'value'])
+        self.assertIsNone(calls[-1]['socket'])
+        self.assertIsNone(calls[-1]['pane'])
+
+    def test_explicit_environment_session_and_path_priority_are_preserved(self):
+        self.env['HERDR_SESSION'] = 'chosen'
+        _, calls = self.run_launcher(['status'])
+        self.assertEqual(calls[-1]['session'], 'chosen')
+        self.assertTrue(calls[-1]['path'].startswith(self.env['PATH']))
+
+    def test_informational_and_duplicate_remote_flags_do_not_prepare(self):
+        for args in [['--remote', 'host', '--skill'], ['--remote', 'host', '--default-config'],
+                     ['--remote', 'one', '--remote', 'two'], ['pane', 'list', '--remote', 'host']]:
+            _, calls = self.run_launcher(args)
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]['argv'], ['herdr', *args])
 
     def test_exit_status_is_preserved(self):
         self.env['SSH_EXIT'] = '19'

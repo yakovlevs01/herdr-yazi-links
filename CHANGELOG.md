@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- Preserve caller sockets, pane IDs and sessions for control commands.
+- Preserve PATH priority and explicit environment sessions.
+- Avoid remote preparation for informational requests and duplicate remote flags.
+- Document update, completion, saved-machine and shared-config exceptions.
+
 ## 0.2.2
 
 - Start prepared servers in a new OS process session, fixing the SSH disconnect warning.

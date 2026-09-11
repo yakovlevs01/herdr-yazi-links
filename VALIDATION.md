@@ -39,3 +39,7 @@ The SSH smoke test also passed using the actual `herdr-yazi` launcher as the cli
 ## 0.2.2 daemon preparation
 
 The earlier remote smoke used `start_new_session=True` directly and therefore missed the preparation helper’s `nohup`-only startup. A dedicated preparation test now checks SID == PID and verifies that an existing server is not restarted. On both macOS ARM64 and Linux x86_64, fresh UUID sessions started through the actual helper report `capabilities.detached_server_daemon: true`. Existing working sessions were left untouched.
+
+## 0.2.3 command audit
+
+Verified current-pane stable identifiers match stock Herdr when invoked from a real managed pane. Help/version/default-config/skill/completion/API-schema output matches the direct patched binary under the same session. Mac SSH click smoke with server keybindings still passes. Tests cover preserved socket and pane context, explicit environment sessions, PATH priority and side-effect-free informational requests. Update behavior was reviewed in source, not executed. See `docs/compatibility.md` for remaining differences.

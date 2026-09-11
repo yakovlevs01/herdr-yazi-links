@@ -56,3 +56,5 @@ Before a release, run the tests, update the manifest version and [CHANGELOG.md](
 Apache-2.0. See [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md).
 
 For SSH host installation and agent-free tests, see [remote operation](docs/remote.md).
+
+[Command compatibility and exceptions](docs/compatibility.md).
