@@ -38,6 +38,7 @@ def main():
     parser.add_argument('--plugin', type=Path, default=ROOT)
     parser.add_argument('--remote', help='SSH host with the plugin and patched Herdr installed')
     parser.add_argument('--remote-root', help='Absolute plugin checkout path on the SSH host')
+    parser.add_argument('--client-arg', action='append', default=[], help='Extra client argument, repeatable; use --client-arg=--flag')
     args = parser.parse_args()
     if bool(args.remote) != bool(args.remote_root):
         parser.error('--remote and --remote-root must be supplied together')
@@ -133,7 +134,7 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
                         del transcript[:1_000_000]
             except OSError:
                 pass
-        client = subprocess.Popen(cli, env=env, cwd=fixture, stdin=slave, stdout=slave, stderr=slave,
+        client = subprocess.Popen(cli + args.client_arg, env=env, cwd=fixture, stdin=slave, stdout=slave, stderr=slave,
                                   start_new_session=True)
         os.close(slave)
         reader = threading.Thread(target=drain, daemon=True)

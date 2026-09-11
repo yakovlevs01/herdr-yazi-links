@@ -31,3 +31,7 @@ GitHub Actions checks stock 0.9.0 and the latest release on changes and weekly. 
 Verified from a stock Linux Herdr 0.9.0 client over real `--remote` SSH connections to Linux x86_64 and macOS ARM64 servers. Both used the pinned patched Herdr server and installed Yazi. OSC 8, relative paths and absolute paths opened Yazi with the target selected; nonexistent paths did not invoke the plugin. The macOS build also passed all 76 focused Herdr action tests. Python runtime was the existing system Python, including Python 3.9.6 on macOS.
 
 Run the command in `docs/remote.md` to repeat these checks against your host. Public CI covers local Linux operation only. The test fixture uses a unique remote session and shuts down only that session.
+
+## 0.2.1 launcher arguments
+
+The SSH smoke test also passed using the actual `herdr-yazi` launcher as the client with `--remote-keybindings server` against macOS ARM64. Launcher regression tests cover unchanged argv, flags in different positions, equals syntax, unknown future flags, explicit sessions, literal arguments after `--`, no SSH for help/version, and exit status propagation.

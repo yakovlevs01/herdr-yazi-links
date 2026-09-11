@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Forward the original Herdr arguments unchanged, including remote keybindings and future options.
+- Respect explicit remote session names and separate preparation from the Herdr CLI.
+- Avoid SSH/setup side effects for help, version and local commands.
+
 ## 0.2.0
 
 - Prepare a remote patched session with `herdr-yazi --remote HOST`.

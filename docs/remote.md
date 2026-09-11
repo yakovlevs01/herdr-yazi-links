@@ -20,7 +20,7 @@ File OSC 8 hyperlinks should then work through ordinary `herdr --remote HOST`. F
 herdr-yazi --remote HOST
 ```
 
-The launcher calls remote `herdr-yazi --prepare`, registers the plugin, and starts a separate `yazi-links` server if needed. It then attaches the local client through `--remote`. It does not copy dependencies or executables, or replace an existing server. An existing server keeps using its previous executable until deliberately restarted after an update.
+The launcher calls remote `scripts/prepare.sh SESSION`, registers the plugin, and starts a separate `yazi-links` server if needed. It then attaches the local client through `--remote`. It does not copy dependencies or executables, or replace an existing server. An existing server keeps using its previous executable until deliberately restarted after an update.
 
 The launcher adds `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin` to the server's PATH. Noninteractive SSH commands may not inherit an interactive shell's PATH. Configure the server's PATH if Yazi is elsewhere.
 
@@ -47,3 +47,14 @@ A native helper could replace Python, but would need separate releases for Linux
 Running `ssh HOST` inside an ordinary pane does not change its owning Herdr server. Nested SSH host detection is not implemented.
 
 Verified with a stock Linux Herdr 0.9.0 client and patched Linux x86_64 / macOS ARM64 servers. See [validation](../VALIDATION.md).
+
+## Herdr arguments
+
+`herdr-yazi` forwards the original argv unchanged, without a flag allowlist. For example:
+
+```sh
+herdr-yazi --remote my-mac-m1 --remote-keybindings server
+herdr-yazi --session work --remote my-mac-m1 --remote-keybindings server
+```
+
+Only `--remote` and `--session` are inspected for remote preparation, including `--flag=value` syntax. Inspection stops at `--`. Help and version requests do not contact SSH. `HERDR_SESSION` supplies the established `yazi-links` default; Herdr handles explicit `--session` and `session attach` itself. New options go directly to the installed Herdr, which decides whether it supports them.

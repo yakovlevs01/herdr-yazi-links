@@ -12,10 +12,11 @@ Install the toolchain versions recorded in [patches/upstream.toml](../patches/up
 ./build.sh
 # If Zig is outside PATH:
 # ZIG=/absolute/path/to/zig ./build.sh
+./scripts/prepare.sh
 ./herdr-yazi
 ```
 
-The launcher registers the plugin and opens a separate `yazi-links` session using `.build/bin/herdr`. It does not replace `/usr/bin/herdr` or restart existing sessions. To put the launcher in PATH:
+The preparation helper registers the plugin; the launcher opens a separate `yazi-links` session using `.build/bin/herdr`. It does not replace `/usr/bin/herdr` or restart existing sessions. To put the launcher in PATH:
 
 ```sh
 mkdir -p ~/.local/bin
