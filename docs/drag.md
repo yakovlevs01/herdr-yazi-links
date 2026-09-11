@@ -86,4 +86,6 @@ Once ripdrag has opened, the transfer is finished and cancellation cannot revoke
 
 This uses Yazi's custom task API and requires Yazi/ya 26.8.15 or later within 26.x; the single installer handles the version check. After upgrading, restart only Yazi and reconnect the local `herdr-yazi` client so both the sender and receiver load the cancellation code. Do not restart the Herdr server.
 
+`Only file path requests are accepted` after upgrading means a new Yazi is connected to an older running broker. Close the local `herdr-yazi` connection and open it again. Replacing files on disk or restarting only Yazi does not upgrade that broker. Requests are not automatically retried without cancellation support.
+
 Run `python3 scripts/drag-smoke.py --remote HOST --progress-check --shell-yazi --cancel-check` to test actual task-manager keys, stopped SFTP, partial-cache cleanup, absence of a ripdrag launch, and a subsequent successful transfer.

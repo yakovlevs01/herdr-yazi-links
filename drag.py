@@ -215,6 +215,9 @@ def submit(paths, watched=False):
             except OSError as error:
                 raise RuntimeError('No active local receiver. Reconnect with herdr-yazi --remote HOST.') from error
             if 'error' in response:
+                if watched and response['error'] == 'Only file path requests are accepted':
+                    raise RuntimeError('Reconnect herdr-yazi: the running receiver predates task cancellation. '
+                                       'Leave the Herdr server running.')
                 raise RuntimeError(response['error'])
             return response
     subprocess.Popen(['ripdrag', '-x', '-a', '-n', '-b', *paths], start_new_session=True,
