@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Send selected or hovered remote Yazi files to local ripdrag with Ctrl+G.
+- Bind one receiver to each remote session, report conflicts, and expire disconnected receivers without replaying requests.
+- Transfer through SFTP over system SSH into atomic retained cache batches, with progress, errors and explicit cleanup.
+- Add a Yazi installer, isolated receiver dependencies, broker/transfer/installer tests and a real launcher remote smoke test.
+- Preserve local ripdrag, original Herdr argv, pane command context and existing server lifetimes.
+
+
 ## 0.2.3
 
 - Preserve caller sockets, pane IDs and sessions for control commands.

@@ -58,3 +58,5 @@ Apache-2.0. См. [LICENSE](LICENSE) и [THIRD_PARTY.md](THIRD_PARTY.md).
 Подробнее об установке на SSH-хостах и проверке без агента: [удалённая работа](docs/remote.ru.md).
 
 [Совместимость команд и исключения](docs/compatibility.ru.md).
+
+Передача по Ctrl+G из удалённого Yazi в локальный ripdrag: [инструкция](docs/drag.ru.md).

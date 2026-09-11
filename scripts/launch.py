@@ -5,8 +5,46 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+import select
+import time
+import signal
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def remote_client(binary, args, env, host, session, python):
+    """Own receiver lifetime without changing Herdr's arguments or server lifetime."""
+    def interrupted(signum, frame):
+        raise SystemExit(128 + signum)
+    previous = {sig: signal.signal(sig, interrupted) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    receiver = subprocess.Popen([str(python), str(ROOT / 'scripts/drag-client.py'), host, session],
+                                env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+    client = None
+    try:
+        ready, _, _ = select.select([receiver.stdout], [], [], 25)
+        if not ready or receiver.stdout.readline() != b'READY\n':
+            raise SystemExit('Local drag receiver could not start. Resolve the reported error and reconnect.')
+        client = subprocess.Popen([str(binary), *args], env=env)
+        while client.poll() is None:
+            if receiver.poll() is not None:
+                client.terminate()
+                client.wait()
+                raise SystemExit('Drag receiver disconnected; Herdr server remains running. Reconnect to continue.')
+            time.sleep(0.1)
+        return client.returncode
+    finally:
+        if client is not None and client.poll() is None:
+            client.terminate()
+            client.wait()
+        receiver.terminate()
+        try:
+            receiver.wait(timeout=25)
+        except subprocess.TimeoutExpired:
+            receiver.kill()
+            receiver.wait()
+        receiver.stdout.close()
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
 
 
 def preparation(args, default_session):
@@ -90,6 +128,9 @@ def main():
         result = subprocess.run(['ssh', '--', host, command], env=env)
         if result.returncode:
             raise SystemExit(result.returncode)
+        python = ROOT / '.build/drag-venv/bin/python'
+        if python.exists():
+            raise SystemExit(remote_client(binary, args, env, host, session, python))
     os.execve(binary, [str(binary), *args], env)
 
 

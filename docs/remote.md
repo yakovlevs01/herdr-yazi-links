@@ -2,7 +2,7 @@
 
 [Русский](remote.ru.md) · [Plugin without a patch](plugin.md)
 
-The local client sends Ctrl-click coordinates to the owning Herdr server. That server resolves the path and invokes its plugin, which opens Yazi on the same host. Relative paths use the remote pane's working directory. Files are not copied to your computer.
+The local client sends Ctrl-click coordinates to the owning Herdr server. That server resolves the path and invokes its plugin, which opens Yazi on the same host. Relative paths use the remote pane's working directory. Clicking does not copy files. Use [Ctrl+G remote drag](drag.md) to download selected files and open local ripdrag.
 
 ## Installation
 

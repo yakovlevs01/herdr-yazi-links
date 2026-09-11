@@ -43,3 +43,18 @@ The earlier remote smoke used `start_new_session=True` directly and therefore mi
 ## 0.2.3 command audit
 
 Verified current-pane stable identifiers match stock Herdr when invoked from a real managed pane. Help/version/default-config/skill/completion/API-schema output matches the direct patched binary under the same session. Mac SSH click smoke with server keybindings still passes. Tests cover preserved socket and pane context, explicit environment sessions, PATH priority and side-effect-free informational requests. Update behavior was reviewed in source, not executed. See `docs/compatibility.md` for remaining differences.
+
+## 0.3.0 remote drag
+
+Validated 2026-09-11 from this Linux graphical desktop with Yazi 26.9.1 and local ripdrag. Both `my-mac-m1` macOS ARM64 and `iw-my-ubuntu` Linux x86_64 ran Yazi 26.8.15. The sender works with macOS system Python 3.9.6. The receiver uses an isolated Paramiko environment and system OpenSSH.
+
+The new `scripts/drag-smoke.py` starts the actual `herdr-yazi --remote HOST --remote-keybindings server --session UUID` launcher. Its normal `prepare.sh` creates the new detached server; the test does not prestart one. It opens real Yazi in a plugin pane and sends Ctrl+G through the local PTY. Both hosts passed hovered file and multiselection downloads, Unicode, quotes, embedded newline, shell punctuation, retained copies with repeated basenames and unchanged originals. A local ripdrag argv recorder verifies exact completed-cache paths. UUID test sessions alone were stopped.
+
+Retained repeat-run evidence on the test desktop:
+
+- macOS: `/tmp/herdr-drag-smoke-lpv19vme/result.json`
+- Ubuntu: `/tmp/herdr-drag-smoke-kket2o30/result.json`
+
+An additional real local ripdrag process started successfully with a downloaded macOS file and remained running after one second. This is a process launch check, not proof of a successful GUI drag-and-drop into another application. GUI drop remains unverified. The existing OSC 8/plain-path click smoke also passed through the launcher against macOS with server keybindings.
+
+Unit/integration tests cover JSON schema and size boundaries, aborted request sockets, session routing, exclusive receiver conflicts, heartbeat expiry, reconnect without replay, receiver/launcher failure and SIGTERM cleanup, literal local ripdrag argv, SFTP errors and incomplete-batch cleanup, manual cache cleanup, and preservation of user keymaps. Remote sender configurations were installed on both hosts; local sender and receiver were installed on the desktop. The remote hosts do not have ripdrag and were tested as senders, not GUI receivers. Existing working Herdr sessions were neither stopped nor restarted.
