@@ -72,4 +72,6 @@ Each revision gets its own `.build/source-<hash>` checkout. A checkout with an u
 
 Version the plugin, patch, pin, tests and build scripts together. Keep Herdr sources, caches and binaries in ignored `.build/`. The standalone plugin remains useful on stock Herdr even while the optional patch needs maintenance.
 
-Remote operation remains untested. The plugin uses the owning Herdr server's socket, so Yazi would run there. The launcher does not deploy the plugin or patch to a remote host. A manual nested SSH connection is not detected.
+The plugin uses the owning Herdr server's socket, so Yazi would run there. The launcher does not deploy the plugin or patch to a remote host. A manual nested SSH connection is not detected.
+
+For SSH host installation and agent-free tests, see [remote operation](remote.md).

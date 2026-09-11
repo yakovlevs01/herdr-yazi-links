@@ -12,7 +12,7 @@ Install Herdr with a compatible plugin API, Python 3 and Yazi. Python and Yazi m
 herdr plugin install yakovlevs01/herdr-yazi-links
 ```
 
-No custom Herdr binary or wrapper is required for this mode. We verified it on stock Linux Herdr 0.9.0. Later versions need the checks below; macOS and remote sessions remain untested.
+No custom Herdr binary or wrapper is required for this mode. We verified it on stock Linux Herdr 0.9.0. Later versions need the checks below. See the remote guide for SSH checks.
 
 For development, clone the repository and link it:
 
@@ -65,7 +65,7 @@ If a click does nothing, test the demo first. If the demo works, check whether y
 herdr plugin log list --plugin local.yazi-links
 ```
 
-Yazi runs on the Herdr server that owns the clicked pane. A remote server would need the plugin, Python and Yazi installed there; this mode has not been tested. Opening remote Yazi does not transfer a file to your local computer.
+Yazi runs on the Herdr server that owns the clicked pane. A remote server would need the plugin, Python and Yazi installed there. Opening remote Yazi does not transfer a file to your local computer.
 
 The plugin validates the path and passes it as an argument, without evaluating it as a shell command. Ordinary paths in prose require the [optional Herdr patch](patched-herdr.md).
 
@@ -78,3 +78,5 @@ Update the manifest version and changelog for each release, and tag it `vMAJOR.M
 Licensed under [Apache-2.0](../LICENSE).
 
 GitHub Actions runs unit tests and the stock smoke test against Herdr 0.9.0 and the latest release on changes and weekly.
+
+For SSH host installation and agent-free tests, see [remote operation](remote.md).

@@ -31,7 +31,7 @@ See the [standalone plugin README](docs/plugin.md) for link syntax, a demo and t
 
 ## Compatibility and checks
 
-Plugin-only mode has been verified on unmodified Linux Herdr 0.9.0. The optional patch targets the exact revision in [patches/upstream.toml](patches/upstream.toml). macOS, `--remote` and individual agent applications' Markdown rendering have not been verified. The manifest's minimum Herdr version does not guarantee compatibility with every later version.
+Plugin-only mode has been verified on unmodified Linux Herdr 0.9.0. The optional patch targets the exact revision in [patches/upstream.toml](patches/upstream.toml). Individual agent applications' Markdown rendering has not been verified. See the remote guide for SSH validation. The manifest's minimum Herdr version does not guarantee compatibility with every later version.
 
 Run these commands from the checkout:
 
@@ -54,3 +54,5 @@ Before a release, run the tests, update the manifest version and [CHANGELOG.md](
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE) and [THIRD_PARTY.md](THIRD_PARTY.md).
+
+For SSH host installation and agent-free tests, see [remote operation](docs/remote.md).

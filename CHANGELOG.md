@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- Prepare a remote patched session with `herdr-yazi --remote HOST`.
+- Add real SSH Ctrl-click smoke tests and bilingual remote installation guides.
+- Include user tool locations in the launcher PATH for noninteractive SSH shells.
+
 ## 0.1.0
 
 - Open existing `file://` hyperlinks in a Yazi split beside the source pane.

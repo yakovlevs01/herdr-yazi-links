@@ -36,7 +36,11 @@ def main():
     parser.add_argument('--herdr', default='herdr', help='Exact executable to test')
     parser.add_argument('--expect-paths', action='store_true', help='Require the plain-text path patch')
     parser.add_argument('--plugin', type=Path, default=ROOT)
+    parser.add_argument('--remote', help='SSH host with the plugin and patched Herdr installed')
+    parser.add_argument('--remote-root', help='Absolute plugin checkout path on the SSH host')
     args = parser.parse_args()
+    if bool(args.remote) != bool(args.remote_root):
+        parser.error('--remote and --remote-root must be supplied together')
     if not sys.platform.startswith('linux'):
         parser.error('The automated PTY smoke test currently supports Linux only.')
     binary = shutil.which(args.herdr)
@@ -74,8 +78,47 @@ while True:
     if not mode: break
 ''')
         cli = [binary, '--session', session]
-        subprocess.run(cli + ['plugin', 'link', str(args.plugin.resolve())], env=env, check=True,
-                       stdout=subprocess.DEVNULL, timeout=15)
+        tunnel = None
+        remote_tmp = None
+        remote_control = None
+        sockpath = None
+        if args.remote:
+            # Start only a fresh UUID session. Existing remote sessions are untouched.
+            remote_control = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', args.remote]
+            setup = r"""import json, os, pathlib, subprocess, sys, tempfile, time
+root = pathlib.Path(sys.argv[1])
+session = sys.argv[2]
+os.environ['PATH'] = str(pathlib.Path.home()/'.local/bin') + ':/opt/homebrew/bin:/usr/local/bin:' + os.environ['PATH']
+for key in list(os.environ):
+    if key.startswith('HERDR_'): del os.environ[key]
+tmp = pathlib.Path(tempfile.mkdtemp(prefix='yazi-remote-smoke-'))
+(tmp/'smoke-target.txt').write_text('remote file test\n')
+(tmp/'render.py').write_text(sys.stdin.read())
+subprocess.run([str(root/'.build/bin/herdr'), '--session', session, 'plugin', 'link', str(root)], check=True, stdout=subprocess.DEVNULL)
+with (tmp/'server.log').open('wb') as log:
+    subprocess.Popen([str(root/'.build/bin/herdr'), '--session', session, 'server'], stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, cwd=tmp)
+sockets = []
+for attempt in range(100):
+    sockets = list((pathlib.Path.home()/'.config').glob('herdr*/sessions/'+session+'/herdr.sock'))
+    if sockets: break
+    time.sleep(0.1)
+if len(sockets) != 1: raise RuntimeError('Cannot locate isolated remote socket: ' + repr(sockets))
+print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
+"""
+            response = subprocess.run(remote_control + [shlex.join(['python3', '-c', setup, args.remote_root, session])],
+                                      input=renderer.read_text(), text=True, stdout=subprocess.PIPE, check=True, timeout=40)
+            info = json.loads(response.stdout)
+            remote_tmp = info['tmp']
+            target = Path(remote_tmp) / 'smoke-target.txt'
+            remote_renderer = str(Path(remote_tmp) / 'render.py')
+            sockpath = tmp / 'remote.sock'
+            tunnel = subprocess.Popen(remote_control[:-1] + ['-o', 'ExitOnForwardFailure=yes', '-N',
+                '-L', str(sockpath) + ':' + info['socket'], args.remote], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            until(lambda: sockpath.exists() or (tunnel.poll() is not None and (_ for _ in ()).throw(RuntimeError('SSH forwarding failed'))), 'SSH socket forward')
+            cli += ['--remote', args.remote]
+        else:
+            subprocess.run(cli + ['plugin', 'link', str(args.plugin.resolve())], env=env, check=True,
+                           stdout=subprocess.DEVNULL, timeout=15)
         master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 120, 0, 0))
         transcript = bytearray()
@@ -97,7 +140,7 @@ while True:
         reader.start()
         stopped = False
         try:
-            sockpath = until(lambda: next((tmp / 'config').glob('herdr*/sessions/' + session + '/herdr.sock'), None), 'test socket')
+            sockpath = sockpath or until(lambda: next((tmp / 'config').glob('herdr*/sessions/' + session + '/herdr.sock'), None), 'test socket')
             def api(method, params=None):
                 with socket.socket(socket.AF_UNIX) as connection:
                     connection.settimeout(10)
@@ -110,7 +153,9 @@ while True:
             panes = lambda: api('pane.list')['panes']
             source = until(lambda: panes(), 'initial pane')[0]['pane_id']
             text = lambda pane: api('pane.read', {'pane_id': pane, 'source': 'visible', 'format': 'text'})['read']['text']
-            command = shlex.join([sys.executable, str(renderer), str(target)])
+            command = shlex.join(['python3', remote_renderer, str(target)]) if args.remote else shlex.join([sys.executable, str(renderer), str(target)])
+            if args.remote:
+                command = 'sh -c ' + shlex.quote('cd ' + shlex.quote(remote_tmp) + ' && exec ' + command)
             api('pane.send_input', {'pane_id': source, 'text': 'exec ' + command, 'keys': ['enter']})
             until(lambda: 'OSC_LINK' in text(source), 'fixture output')
             os.write(master, b'\x1b[I')
@@ -140,14 +185,19 @@ while True:
                         raise RuntimeError(mode + ': unexpected plugin invocation')
                 print('PASS ' + mode + (' opens Yazi' if should_open else ' does not open Yazi'), flush=True)
             print('PASS executable: ' + binary, flush=True)
+            if args.remote:
+                print('PASS remote host: ' + args.remote, flush=True)
         except Exception:
             sys.stderr.write(transcript.decode(errors='replace')[-2500:].replace('\x1b', '<ESC>') + '\n')
             raise
         finally:
             # Only our UUID-named server, with isolated configuration; never the user's session.
             try:
-                subprocess.run(cli + ['server', 'stop'], env=env, check=True, timeout=10,
-                               stdout=subprocess.DEVNULL)
+                if args.remote:
+                    cleanup = 'import pathlib, shutil, subprocess, sys; root, session, tmp = sys.argv[1:]; subprocess.run([str(pathlib.Path(root)/".build/bin/herdr"), "--session", session, "server", "stop"], check=True); shutil.rmtree(tmp)'
+                    subprocess.run(remote_control + [shlex.join(['python3', '-c', cleanup, args.remote_root, session, remote_tmp])], check=True, timeout=20, stdout=subprocess.DEVNULL)
+                else:
+                    subprocess.run(cli + ['server', 'stop'], env=env, check=True, timeout=10, stdout=subprocess.DEVNULL)
                 stopped = True
             finally:
                 try:
@@ -156,6 +206,9 @@ while True:
                     client.terminate()
                     client.wait(timeout=5)
                 os.close(master)
+                if tunnel is not None:
+                    tunnel.terminate()
+                    tunnel.wait(timeout=5)
             if not stopped:
                 raise RuntimeError('Failed to stop isolated test server ' + session)
 

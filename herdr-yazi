@@ -10,5 +10,31 @@ fi
 # Do not inherit the calling pane's socket when launched from another Herdr.
 unset HERDR_SOCKET_PATH HERDR_CLIENT_SOCKET_PATH HERDR_ENV
 unset HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID
+# SSH non-login shells commonly omit user-installed tools.
+PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH
+if [ "${1:-}" = --remote ]; then
+    if [ "$#" -ne 2 ]; then
+        echo 'Usage: herdr-yazi --remote SSH_HOST' >&2
+        exit 2
+    fi
+    ssh -- "$2" 'exec "$HOME/pets/herdr-yazi-links/herdr-yazi" --prepare'
+    exec "$binary" --session yazi-links --remote "$2"
+fi
 "$binary" --session yazi-links plugin link "$plugin_dir" >/dev/null
+if [ "${1:-}" = --prepare ]; then
+    if ! "$binary" --session yazi-links pane list >/dev/null 2>&1; then
+        nohup "$binary" --session yazi-links server >>"$plugin_dir/.build/session-start.log" 2>&1 </dev/null &
+        attempt=0
+        until "$binary" --session yazi-links pane list >/dev/null 2>&1; do
+            attempt=$((attempt + 1))
+            if [ "$attempt" -ge 100 ]; then
+                echo "Server did not start; see $plugin_dir/.build/session-start.log" >&2
+                exit 1
+            fi
+            sleep 0.1
+        done
+    fi
+    exit 0
+fi
 exec "$binary" --session yazi-links "$@"
