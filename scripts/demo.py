@@ -11,6 +11,10 @@ print('\x1b]8;;' + path.as_uri() + '\x1b\\Open this file in Yazi\x1b]8;;\x1b\\')
 print('\nThese plain paths additionally require the Herdr patch:')
 print(path)
 try:
+    print('~/' + str(path.relative_to(Path.home())))
+except ValueError:
+    pass
+try:
     print(path.relative_to(Path.cwd()))
 except ValueError:
     pass

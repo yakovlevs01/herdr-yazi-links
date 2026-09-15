@@ -1,8 +1,8 @@
 diff --git a/src/app/actions.rs b/src/app/actions.rs
-index d5d13d5..b4c5fb5 100644
+index d5d13d5..5746f99 100644
 --- a/src/app/actions.rs
 +++ b/src/app/actions.rs
-@@ -1151,7 +1151,46 @@ fn url_at_runtime_cell(
+@@ -1151,7 +1151,60 @@ fn url_at_runtime_cell(
          .find('\n')
          .map_or(visible_text.len(), |idx| logical_cell.byte_index + idx);
      let line = visible_text.get(line_start..line_end)?;
@@ -28,12 +28,8 @@ index d5d13d5..b4c5fb5 100644
 +    if token.contains(':') || token.chars().any(char::is_control) {
 +        return None;
 +    }
-+    let path = std::path::Path::new(token);
-+    let path = if path.is_absolute() {
-+        path.to_path_buf()
-+    } else {
-+        cwd.join(path)
-+    };
++    let home = std::env::home_dir();
++    let path = resolve_file_link_path(token, cwd, home.as_deref())?;
 +    if !path.is_file() && !path.is_dir() {
 +        return None;
 +    }
@@ -47,10 +43,28 @@ index d5d13d5..b4c5fb5 100644
 +        }
 +    }
 +    Some(uri)
++}
++
++fn resolve_file_link_path(
++    token: &str,
++    cwd: &std::path::Path,
++    home: Option<&std::path::Path>,
++) -> Option<std::path::PathBuf> {
++    if let Some(rest) = token.strip_prefix("~/") {
++        // Resolve on the pane's server, never relative to the pane cwd.
++        let home = home.filter(|path| path.is_absolute())?;
++        return Some(home.join(rest.trim_start_matches('/')));
++    }
++    let path = std::path::Path::new(token);
++    Some(if path.is_absolute() {
++        path.to_path_buf()
++    } else {
++        cwd.join(path)
++    })
  }
  
  pub(crate) fn safe_web_url(url: &str) -> Option<&str> {
-@@ -2522,6 +2561,69 @@ mod tests {
+@@ -2522,6 +2575,96 @@ mod tests {
          assert_eq!(selected_url("open file:///tmp/report", "file"), None);
      }
  
@@ -95,6 +109,33 @@ index d5d13d5..b4c5fb5 100644
 +        ] {
 +            assert_eq!(file_url_at_column(row, 0, &root), None, "{row}");
 +        }
++    }
++
++    #[test]
++    fn file_links_expand_home_only_for_tilde_slash() {
++        use std::path::Path;
++        let cwd = Path::new("/work/project");
++        let home = Some(Path::new("/home/tester"));
++        for (token, expected) in [
++            ("~/README.md", "/home/tester/README.md"),
++            ("~/", "/home/tester/"),
++            ("~//README.md", "/home/tester/README.md"),
++            ("~/my files/отчёт.rs", "/home/tester/my files/отчёт.rs"),
++            ("README.md", "/work/project/README.md"),
++            ("/tmp/README.md", "/tmp/README.md"),
++            ("~someone/README.md", "/work/project/~someone/README.md"),
++        ] {
++            assert_eq!(
++                resolve_file_link_path(token, cwd, home).as_deref(),
++                Some(Path::new(expected))
++            );
++        }
++        assert!(resolve_file_link_path("~/README.md", cwd, None).is_none());
++        assert!(resolve_file_link_path("~/README.md", cwd, Some(Path::new("relative"))).is_none());
++        assert_eq!(
++            resolve_file_link_path("README.md", cwd, None).unwrap(),
++            cwd.join("README.md")
++        );
 +    }
 +
 +    #[test]

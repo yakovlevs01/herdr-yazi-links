@@ -35,11 +35,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--herdr', default='herdr', help='Exact executable to test')
     parser.add_argument('--expect-paths', action='store_true', help='Require the plain-text path patch')
+    parser.add_argument('--expect-home-paths', action='store_true', help='Require ~/ path expansion in a local test')
     parser.add_argument('--plugin', type=Path, default=ROOT)
     parser.add_argument('--remote', help='SSH host with the plugin and patched Herdr installed')
     parser.add_argument('--remote-root', help='Absolute plugin checkout path on the SSH host')
     parser.add_argument('--client-arg', action='append', default=[], help='Extra client argument, repeatable; use --client-arg=--flag')
     args = parser.parse_args()
+    if args.expect_home_paths and args.remote:
+        parser.error('--expect-home-paths currently requires a local test')
     if bool(args.remote) != bool(args.remote_root):
         parser.error('--remote and --remote-root must be supplied together')
     if not sys.platform.startswith('linux'):
@@ -63,16 +66,20 @@ def main():
             (directory / 'config.toml').write_text(config)
         fixture = tmp / 'fixture'
         fixture.mkdir()
+        if not args.remote:
+            env['HOME'] = str(tmp)
         target = fixture / 'smoke-target.txt'
         target.write_text('Yazi file link smoke test\n')
         renderer = tmp / 'render.py'
-        renderer.write_text('''import sys
+        renderer.write_text('''import os
+import sys
 from pathlib import Path
 p = Path(sys.argv[1])
 mode = "osc"
 while True:
     text = {"osc": "\\x1b]8;;" + p.as_uri() + "\\x1b\\\\OSC_LINK\\x1b]8;;\\x1b\\\\",
-            "relative": p.name, "absolute": str(p), "missing": "missing-file.txt"}[mode]
+            "relative": p.name, "absolute": str(p), "home": "~/" + os.path.relpath(p, Path.home()),
+            "home_missing": "~/missing-file.txt", "missing": "missing-file.txt"}[mode]
     sys.stdout.write("\\x1b[2J\\x1b[H" + text + "\\n")
     sys.stdout.flush()
     mode = sys.stdin.readline().strip()
@@ -161,9 +168,14 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
             until(lambda: 'OSC_LINK' in text(source), 'fixture output')
             os.write(master, b'\x1b[I')
             time.sleep(0.3)
-            for mode, label, should_open in [('osc', 'OSC_LINK', True),
-                    ('relative', target.name, args.expect_paths),
-                    ('absolute', str(target), args.expect_paths), ('missing', 'missing-file.txt', False)]:
+            cases = [('osc', 'OSC_LINK', True),
+                     ('relative', target.name, args.expect_paths),
+                     ('absolute', str(target), args.expect_paths)]
+            if args.expect_home_paths:
+                cases += [('home', '~/fixture/' + target.name, True),
+                          ('home_missing', '~/missing-file.txt', False)]
+            cases.append(('missing', 'missing-file.txt', False))
+            for mode, label, should_open in cases:
                 if mode != 'osc':
                     api('pane.send_input', {'pane_id': source, 'text': mode, 'keys': ['enter']})
                     until(lambda: label in text(source), mode + ' output')

@@ -36,7 +36,7 @@ cd "$source_dir"
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-"$build_dir/target"}
 cargo +"$toolchain" test --locked --bin herdr app::actions::tests::
 cargo +"$toolchain" build --locked --release
-python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --plugin "$plugin_dir"
+python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-home-paths --plugin "$plugin_dir"
 # Replace atomically; an already running server keeps its old executable.
 candidate=$(mktemp "$build_dir/bin/herdr.XXXXXXXX")
 trap 'rm -f -- "$candidate"' EXIT

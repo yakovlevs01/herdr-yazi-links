@@ -26,7 +26,7 @@ ln -s "$PWD/herdr-yazi" ~/.local/bin/herdr-yazi
 Run `python3 scripts/demo.py` inside that session. Ctrl-click both the hyperlink and the ordinary paths. Run the automated check from the checkout:
 
 ```sh
-python3 scripts/smoke.py --herdr .build/bin/herdr --expect-paths
+python3 scripts/smoke.py --herdr .build/bin/herdr --expect-paths --expect-home-paths
 ```
 
 ## How recognition works
@@ -34,6 +34,8 @@ python3 scripts/smoke.py --herdr .build/bin/herdr --expect-paths
 Herdr first checks for an existing terminal hyperlink. Otherwise the patch uses the terminal's cell mapping to find text under Ctrl-click, including soft-wrapped lines and Unicode. It extracts a candidate path, removes surrounding punctuation and checks whether it names an existing regular file or directory.
 
 Absolute paths use their own location. Relative paths, including bare filenames, resolve against the source pane process's working directory. A word like `tests` can therefore open a directory of that name. If the agent meant another project, existence alone cannot detect that mistake.
+
+The `~/` prefix expands to the home directory of the user running the Herdr server. For example, `~/pets/project/README.md` works regardless of the pane working directory. `~user/` is not expanded.
 
 Quoted paths containing `/` can include spaces. Unquoted paths with spaces and `:line:column` suffixes are unsupported. The plugin passes the resulting path as an argument and does not execute the clicked text. Existing terminal hyperlinks take priority; HTTP(S) links keep their usual behavior.
 

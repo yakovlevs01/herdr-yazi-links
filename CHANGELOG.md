@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Expand `~/` in clicked plain-text paths using the Herdr server user’s home directory. Add resolver and terminal Ctrl-click regression coverage.
+- This change requires rebuilding patched Herdr; the pinned installer download still contains the previous patch.
+
 ## 0.4.0
 
 - Add progress in the Yazi status bar through its Lua API: aggregate bytes, percent, file count, persistent errors and brief completion state. No system notifications or new binary patches.
