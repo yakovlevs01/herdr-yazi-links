@@ -76,11 +76,22 @@ def fetch(url, destination, expected=None):
             temporary.unlink(missing_ok=True)
 
 
+def verified_local_build(root):
+    """A build receipt binds the installed bytes to this checkout's pin and patch."""
+    try:
+        receipt = json.loads((root / '.build/bin/herdr.build.json').read_text())
+        pin = tomllib.loads((root / 'patches/upstream.toml').read_text())
+        return (receipt['revision'] == pin['revision'] and
+                receipt['patch_sha256'] == digest(root / 'patches' / pin['patch']) and
+                receipt['sha256'] == digest(root / '.build/bin/herdr'))
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
 
 def install_herdr(root, manifest, selected):
     binary = root / '.build/bin/herdr'
     entry = manifest['herdr'][selected]
-    if not binary.exists() or digest(binary) != entry['sha256']:
+    if not verified_local_build(root) and (not binary.exists() or digest(binary) != entry['sha256']):
         fetch(entry['url'], binary, entry['sha256'])
     binary.chmod(0o755)
     run([binary, '--version'])
@@ -193,7 +204,7 @@ def check(root, manifest, selected, sender_only):
     binary = root / '.build/bin/herdr'
     checks = {
         'Python 3.11+': sys.version_info >= (3, 11),
-        'pinned patched Herdr': binary.exists() and digest(binary) == manifest['herdr'][selected]['sha256'],
+        'pinned patched Herdr': binary.exists() and (digest(binary) == manifest['herdr'][selected]['sha256'] or verified_local_build(root)),
         'Yazi >=26.8.15, <27 and ya': compatible_yazi() or compatible_yazi(root / '.build/yazi/bin/yazi', root / '.build/yazi/bin/ya'),
         'SSH': bool(shutil.which('ssh')),
         'remote checkout path': (Path.home() / 'pets/herdr-yazi-links').resolve() == root.resolve(),

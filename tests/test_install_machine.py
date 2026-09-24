@@ -72,6 +72,30 @@ class MachineInstallerTests(unittest.TestCase):
                 INSTALL.install_herdr(root, manifest, 'linux-x86_64')
                 fetch.assert_not_called()
 
+    def test_local_build_receipt_preserves_binary_and_detects_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.build/bin').mkdir(parents=True)
+            (root / 'patches').mkdir()
+            (root / 'patches/upstream.toml').write_text('revision = "abc"\npatch = "fix.patch"\n')
+            patch_file = root / 'patches/fix.patch'
+            patch_file.write_text('patch')
+            binary = root / '.build/bin/herdr'
+            binary.write_bytes(b'local build')
+            receipt = {'revision': 'abc', 'sha256': INSTALL.digest(binary),
+                       'patch_sha256': INSTALL.digest(patch_file)}
+            (root / '.build/bin/herdr.build.json').write_text(json.dumps(receipt))
+            manifest = {'herdr': {'linux-x86_64': {'url': 'unused', 'sha256': '0' * 64}}}
+            with patch.object(INSTALL, 'run'), patch.object(INSTALL, 'fetch') as fetch:
+                INSTALL.install_herdr(root, manifest, 'linux-x86_64')
+                fetch.assert_not_called()
+            self.assertTrue(INSTALL.verified_local_build(root))
+            binary.write_bytes(b'changed')
+            self.assertFalse(INSTALL.verified_local_build(root))
+            binary.write_bytes(b'local build')
+            patch_file.write_text('different patch')
+            self.assertFalse(INSTALL.verified_local_build(root))
+
     def test_shell_config_is_idempotent_and_appends_path(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

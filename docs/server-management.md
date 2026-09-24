@@ -52,7 +52,10 @@ verify Mac UI behavior or image paste into agents.
 Use the project's pinned build/install workflow for updates. The managed entry
 rejects `update` and `channel` to prevent upstream's updater overwriting the
 patched binary. Direct executable paths bypass this protection. Running servers
-are not restarted by installation.
+are not restarted by installation. `build.sh` records the binary hash, upstream
+revision and patch hash after successful checks; the installer preserves local
+builds with a matching receipt. This receipt is local build metadata, not a
+cryptographic signature. Published downloads keep their release SHA256 checks.
 
 A user service is not a logind graphical session. Desktop features require a
 running desktop, and already-running processes do not inherit subsequent

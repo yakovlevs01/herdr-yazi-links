@@ -42,4 +42,18 @@ candidate=$(mktemp "$build_dir/bin/herdr.XXXXXXXX")
 trap 'rm -f -- "$candidate"' EXIT
 install -m755 "$CARGO_TARGET_DIR/release/herdr" "$candidate"
 mv -f -- "$candidate" "$build_dir/bin/herdr"
+# A receipt lets install.sh preserve a tested local build instead of downloading
+# an older release. It is checked against the current pin, patch and binary.
+python3 - "$build_dir/bin/herdr" "$revision" "$patch_file" <<'RECEIPT'
+import hashlib, json, pathlib, sys
+binary, revision, patch = sys.argv[1:]
+def digest(path):
+    with open(path, 'rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+receipt = pathlib.Path(binary + '.build.json')
+temporary = receipt.with_suffix('.tmp')
+temporary.write_text(json.dumps({'revision': revision, 'sha256': digest(binary),
+                                 'patch_sha256': digest(patch)}, indent=2) + '\n')
+temporary.replace(receipt)
+RECEIPT
 echo "Built and tested: $build_dir/bin/herdr"
