@@ -1,9 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-09-24)
 
-- Expand `~/` in clicked plain-text paths using the Herdr server user’s home directory. Add resolver and terminal Ctrl-click regression coverage.
-- This change requires rebuilding patched Herdr; the pinned installer download still contains the previous patch.
+- Maintain local Yazi drag receivers for enabled saved SSH machines, with independent reconnects, profile refresh, and reuse by standalone remote clients.
+- Fix drag routing for Herdr's default session.
+- Add opt-in Linux/systemd/zsh server management with `./install.sh --managed-server`. Local and SSH clients of `yazi-links` share the pinned server and its desktop environment, without inheriting SSH variables.
+- Preserve existing servers until an explicit migration. Reject direct upstream updates through the managed entry point; document Mac rediscovery, migration, diagnostics, and rollback.
+- Record tested local builds and preserve them during installation when the upstream revision, patch and binary hashes still match. Published downloads retain their SHA256 checks.
+- Expand `~/` in clicked plain-text paths using the Herdr server user's home directory, with resolver and terminal Ctrl-click regression coverage.
+- Add service isolation, installer idempotence, local build receipt, and saved-machine receiver tests, plus English and Russian guides.
+
+Upgrade notes: existing installations opt into server management explicitly. Already enabled installations retain it on reinstall. The existing pinned prebuilt downloads remain unchanged; the `~/` click fix requires `./build.sh`. No running Herdr session is restarted by installation.
+
+## 0.4.1
+
+- Cancel remote downloads from Yazi's task manager, stop active SFTP transfers, and clean partial downloads.
+- Keep progress visible in narrow panes and explain when an older drag broker needs a reconnect.
 
 ## 0.4.0
 

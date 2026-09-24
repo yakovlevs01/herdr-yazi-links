@@ -116,3 +116,12 @@ and test GUI processes were closed. GUI drop into another application was not
 part of this check. The service claims one receiver per remote session; it does
 not route requests by the originating TUI client.
 
+## Managed server integration, 2026-09-24
+
+- Installed user unit passes `systemd-analyze --user verify`. Repeated installation preserves the entry point and shell config without restarting a server.
+- Actual migration completed: the pinned 0.9.0 server runs under `herdr-yazi-server.service`, with graphical variables and no inherited SSH variables. Codex and Claude inherit its desktop environment.
+- A real Mac client reconnected through the pinned `remote-client-bridge` to the same service-owned server. The server PID did not change. Agent image paste itself was not observed.
+- `scripts/smoke-server.py` checks the actual pinned server under disposable services from local and SSH-like caller environments, including display variables, absence of SSH variables, service cgroup and detached SID.
+- The 0.5.0 preparation adds tests for managed startup failure, update protection, installer idempotence, and local build receipts. Build and final check results are recorded below.
+
+Final 0.5.0 checks: 87 Python tests and 77 targeted Rust tests passed. The release build passed OSC 8, relative, absolute, home, missing-home and missing-file terminal click checks. Both disposable systemd startup scenarios passed. `install.sh --check` passes every check with the generated local build receipt. Shell syntax and `git diff --check` pass. The production service remains active with PID 151035; publication did not restart it.
