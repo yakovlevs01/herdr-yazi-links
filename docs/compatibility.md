@@ -22,3 +22,11 @@ This is not a fully separate Herdr installation:
 Do not run `update` as a compatibility probe: it mutates the executable. The updater source confirms it replaces the current executable.
 
 Audit checks cover arguments and exit codes, `--current` against a real pane, help/version/default config/skill/API schema/completion output under the same session, and real SSH clicks against macOS with server keybindings. The launcher preserves existing PATH priority and appends fallback tool locations. These checks cover the exercised scenarios, not every future upstream change.
+
+### Managed Linux server
+
+With `./install.sh --managed-server`, `~/.local/bin/herdr` becomes the pinned
+entry point and takes priority in zsh, including SSH. Saved clients must
+rediscover it. The `yazi-links` server starts through the user service;
+`update` and `channel` through this entry are rejected. Direct `/usr/bin/herdr`
+remains available and bypasses these rules. See [server management](server-management.md).

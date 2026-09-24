@@ -56,3 +56,10 @@ Keep the checkout in place: the launcher and plugin refer to it. You can rerun t
 This checks dependencies, the patched binary checksum, installed plugin content, Ctrl+G and progress initialization without changing files. It does not perform a GUI drag. See [remote drag](drag.md) for transfer tests and cache management.
 
 Python 3.11+ is required by the installation/configuration tools. The bootstrap script installs it from your package manager when missing. If your OS repository only provides an older Python, it reports that limitation; use an OS release with Python 3.11+.
+
+## Optional desktop server management
+
+On Linux/systemd with zsh, use `./install.sh --managed-server` to run the shared
+`yazi-links` server independently of SSH. Existing enabled installations retain
+this mode on reinstall. Headless hosts and other shells can use the ordinary
+installer. See [migration and maintenance](server-management.md).

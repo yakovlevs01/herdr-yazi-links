@@ -76,6 +76,7 @@ def fetch(url, destination, expected=None):
             temporary.unlink(missing_ok=True)
 
 
+
 def install_herdr(root, manifest, selected):
     binary = root / '.build/bin/herdr'
     entry = manifest['herdr'][selected]
@@ -198,6 +199,10 @@ def check(root, manifest, selected, sender_only):
         'remote checkout path': (Path.home() / 'pets/herdr-yazi-links').resolve() == root.resolve(),
         'launcher': (Path.home() / '.local/bin/herdr-yazi').resolve() == (root / 'herdr-yazi').resolve(),
     }
+    if (root / '.build/server-management.json').exists():
+        checks['managed server unit'] = (Path.home() / '.config/systemd/user/herdr-yazi-server.service').exists()
+        checks['managed server entry'] = (Path.home() / '.local/bin/herdr').resolve() == (root / 'scripts/herdr-entry.py').resolve()
+        checks['managed server enabled in launcher'] = (root / '.build/server-management.json').exists()
     if not sender_only:
         python = root / '.build/drag-venv/bin/python'
         checks['ripdrag'] = bool(shutil.which('ripdrag'))
@@ -230,11 +235,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sender-only', action='store_true', help='Skip local ripdrag/receiver on a machine used only as a remote sender')
     parser.add_argument('--check', action='store_true', help='Read-only installation check')
+    parser.add_argument('--managed-server', action='store_true', help='Opt into Linux/systemd/zsh desktop server management')
     args = parser.parse_args()
     try:
         selected = target()
         manifest = json.loads((ROOT / 'install-assets.json').read_text())
         sender_only = args.sender_only
+        if args.managed_server and (not sys.platform.startswith('linux') or Path(os.environ.get('SHELL', '')).name != 'zsh'):
+            raise ValueError('--managed-server requires Linux, systemd --user and zsh')
         if args.check:
             return 0 if check(ROOT, manifest, selected, sender_only) else 1
         if os.geteuid() == 0:
@@ -251,6 +259,8 @@ def main():
         run([sys.executable, ROOT / 'scripts/install-drag.py'])
         link(Path.home() / '.local/bin/herdr-yazi', ROOT / 'herdr-yazi')
         configure_path(Path.home())
+        if args.managed_server or (ROOT / '.build/server-management.json').exists():
+            run([sys.executable, ROOT / 'scripts/install-server.py'])
         env = {key: value for key, value in os.environ.items() if not key.startswith('HERDR_')}
         run([binary, '--session', 'yazi-links', 'plugin', 'link', ROOT], env=env)
         if not check(ROOT, manifest, selected, sender_only):

@@ -70,3 +70,12 @@ For SSH host installation and agent-free tests, see [remote operation](docs/remo
 [Command compatibility and exceptions](docs/compatibility.md).
 
 For Ctrl+G from remote Yazi to local ripdrag, see [remote drag](docs/drag.md).
+
+## Managed Linux server
+
+On Linux/zsh, `./install.sh --managed-server` opts into a user service for `yazi-links`, with
+an SSH-discoverable `~/.local/bin/herdr` entry point. Both local and remote
+clients use the pinned server, without inheriting SSH variables. Existing
+servers are kept running until an explicit migration. See
+[server setup and migration](docs/server-management.md). Test isolation with
+`python3 scripts/smoke-server.py` from a running Linux desktop.

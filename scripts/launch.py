@@ -151,6 +151,9 @@ def main():
         python = ROOT / '.build/drag-venv/bin/python'
         if python.exists():
             raise SystemExit(remote_client(binary, args, env, host, session, python))
+    if sys.platform.startswith('linux') and (ROOT / '.build/server-management.json').exists():
+        entry = ROOT / 'scripts/herdr-entry.py'
+        os.execve(sys.executable, [sys.executable, str(entry), *args], env)
     os.execve(binary, [str(binary), *args], env)
 
 

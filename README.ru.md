@@ -70,3 +70,10 @@ Apache-2.0. См. [LICENSE](LICENSE) и [THIRD_PARTY.md](THIRD_PARTY.md).
 [Совместимость команд и исключения](docs/compatibility.ru.md).
 
 Передача по Ctrl+G из удалённого Yazi в локальный ripdrag: [инструкция](docs/drag.ru.md).
+
+## Сервер Linux без SSH-окружения
+
+`./install.sh --managed-server` на Linux/zsh настраивает запуск `yazi-links` через
+`systemd --user`. Локальный клиент и Mac используют одну закреплённую сборку.
+Работающие сессии автоматически не перезапускаются. [Переход, проверки и
+обновления](docs/server-management.ru.md).

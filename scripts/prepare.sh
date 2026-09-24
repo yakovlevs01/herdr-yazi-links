@@ -9,6 +9,9 @@ unset HERDR_PANE_ID HERDR_WORKSPACE_ID HERDR_TAB_ID
 PATH="${PATH:-/usr/bin:/bin}:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
 export PATH
 "$binary" --session "$session" plugin link "$plugin_dir" >/dev/null
+if [ "$session" = yazi-links ] && [ -f "$plugin_dir/.build/server-management.json" ]; then
+    exec python3 "$plugin_dir/scripts/server-manager.py" ensure
+fi
 if ! "$binary" --session "$session" pane list >/dev/null 2>&1; then
     # nohup alone leaves the server in SSH's process session. Herdr checks SID == PID.
     python3 - "$binary" "$session" "$plugin_dir/.build/session-start.log" <<'DETACH'

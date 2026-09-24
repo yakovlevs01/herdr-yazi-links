@@ -4,16 +4,17 @@ set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case "${1:-}" in
   -h|--help) cat <<'HELP'
-Usage: ./install.sh [--sender-only] [--check]
+Usage: ./install.sh [--sender-only] [--managed-server] [--check]
 Install the pinned patched Herdr, Yazi Ctrl+G/progress plugin and launcher.
 Also installs local ripdrag and SSH download support by default.
 Use --sender-only for machines that only send files. --check reports readiness without changing files.
+Use --managed-server to opt into Linux/systemd/zsh desktop server management.
 Package installation may ask for sudo. Existing sessions are not restarted.
 HELP
     exit 0 ;;
 esac
 for option in "$@"; do
-    case "$option" in --sender-only|--check) ;; *) echo "Unknown option: $option (use --help)" >&2; exit 2 ;; esac
+    case "$option" in --sender-only|--managed-server|--check) ;; *) echo "Unknown option: $option (use --help)" >&2; exit 2 ;; esac
 done
 # Keep the user's PATH order; add conventional tool locations only as fallbacks.
 PATH="${PATH:-/usr/bin:/bin}:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin"
