@@ -89,3 +89,30 @@ This uses Yazi's custom task API and requires Yazi/ya 26.8.15 or later within 26
 `Only file path requests are accepted` after upgrading means a new Yazi is connected to an older running broker. Close the local `herdr-yazi` connection and open it again. Replacing files on disk or restarting only Yazi does not upgrade that broker. Requests are not automatically retried without cancellation support.
 
 Run `python3 scripts/drag-smoke.py --remote HOST --progress-check --shell-yazi --cancel-check` to test actual task-manager keys, stopped SFTP, partial-cache cleanup, absence of a ripdrag launch, and a subsequent successful transfer.
+
+## Saved machines in the sidebar
+
+On the receiving Linux desktop, after installing ripdrag and the receiver venv:
+
+```sh
+python3 scripts/install-saved-receiver.py
+systemctl --user status herdr-yazi-saved-drag.service
+```
+
+The graphical-session user service maintains receivers for enabled profiles from
+`herdr machine list --json`. Ctrl+G works through saved machines in ordinary Herdr;
+no standalone `--remote` window is required. Profiles are refreshed every two
+seconds, disabled/removed profiles release their receivers, and failed SSH
+connections retry independently. It never starts or replaces Herdr servers.
+`herdr-yazi --remote` reuses a ready managed receiver for the same target/session.
+Status and logs live under `~/.local/state/herdr-yazi-drag/saved-machines/`.
+
+The existing single-receiver-per-remote-session restriction remains: all Ctrl+G
+requests in that session go to its receiving desktop, regardless of the client
+that sent the key. Stop this service before receiving that session on another
+computer. macOS can run `python3 scripts/saved-drag.py` manually; the service
+installer is Linux/systemd only.
+
+Autostart requires an active `graphical-session.target`. If your compositor does
+not activate it, start `herdr-yazi-saved-drag.service` from its startup hook after
+importing the desktop environment into the user manager.

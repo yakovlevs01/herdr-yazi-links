@@ -33,6 +33,14 @@ class RemoteClientTests(unittest.TestCase):
         return launcher.remote_client('/patched/herdr', ['--remote', 'host', '--future', 'a b'],
                                       {'PATH': '/user/bin'}, 'host', 'session', '/venv/python')
 
+    def test_saved_receiver_is_reused_without_spawning_a_second_receiver(self):
+        with patch.object(launcher, 'managed_receiver', return_value=True), \
+                patch.object(launcher.subprocess, 'call', return_value=0) as call, \
+                patch.object(launcher.subprocess, 'Popen') as spawn:
+            self.assertEqual(self.invoke(), 0)
+        spawn.assert_not_called()
+        self.assertEqual(call.call_args.args[0], ['/patched/herdr', '--remote', 'host', '--future', 'a b'])
+
     def test_startup_refusal_never_launches_herdr_and_cleans_receiver(self):
         receiver = self.receiver(b'')
         with patch.object(launcher.subprocess, 'Popen', return_value=receiver) as spawn, \

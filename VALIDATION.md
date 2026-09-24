@@ -102,3 +102,17 @@ Ubuntu also passed the same cancellation and recovery check at
 `/tmp/herdr-drag-smoke-znk346hs/`, including `cancelled-pane.txt`. The shell-launch
 test now waits for Yazi's normal-mode status, so an echoed shell command cannot
 be mistaken for a ready file manager.
+
+## Saved-machine receivers
+
+The Linux user service manages enabled saved profiles without a `--remote`
+client. Tests cover duplicate and disabled profiles, changing sessions, removal,
+independent connection retry, default-session routing, and reuse by standalone
+launches. Live checks on the receiving Linux desktop used the existing Mac and
+IW saved profiles, temporary remote Yazi panes, and Ctrl+G sent with
+`herdr --machine LABEL pane send-keys`. Both copied the expected bytes and opened
+real mapped local ripdrag windows, verified through Hyprland. Only test panes
+and test GUI processes were closed. GUI drop into another application was not
+part of this check. The service claims one receiver per remote session; it does
+not route requests by the originating TUI client.
+

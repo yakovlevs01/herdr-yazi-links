@@ -8,12 +8,32 @@ import sys
 import select
 import time
 import signal
+import fcntl
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def managed_receiver(host, session):
+    state = Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / 'herdr-yazi-drag/saved-machines'
+    try:
+        with (state/'manager.lock').open('r') as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return False
+            except BlockingIOError:
+                pass
+            value = json.loads((state/'status.json').read_text())
+            return any(row.get('ready') and row.get('target') == host and row.get('session') == session
+                       for row in value['receivers'])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def remote_client(binary, args, env, host, session, python):
     """Own receiver lifetime without changing Herdr's arguments or server lifetime."""
+    if managed_receiver(host, session):
+        return subprocess.call([str(binary), *args], env=env)
     def interrupted(signum, frame):
         raise SystemExit(128 + signum)
     previous = {sig: signal.signal(sig, interrupted) for sig in (signal.SIGTERM, signal.SIGHUP)}

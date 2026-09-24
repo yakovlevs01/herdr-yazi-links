@@ -309,6 +309,10 @@ class LocalTests(unittest.TestCase):
         self.assertTrue(launch.call_args.kwargs['start_new_session'])
         self.assertEqual(result['message'], 'Opened local ripdrag')
 
+    def test_default_socket_maps_to_default_profile_session(self):
+        with patch.dict(os.environ, {'HERDR_SOCKET_PATH': '/home/me/.config/herdr/herdr.sock'}):
+            self.assertEqual(drag.session_name(), 'default')
+
     def test_owning_socket_overrides_inherited_session(self):
         with patch.dict(os.environ, {'HERDR_SOCKET_PATH': '/tmp/herdr/actual/control.sock',
                                      'HERDR_SESSION': 'inherited'}, clear=True):

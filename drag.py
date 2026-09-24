@@ -25,7 +25,10 @@ def state_root():
 def session_name():
     # The owning socket wins over potentially inherited environment defaults.
     sock = os.environ.get('HERDR_SOCKET_PATH')
-    return Path(sock).parent.name if sock else os.environ.get('HERDR_SESSION')
+    if sock:
+        parent = Path(sock).parent
+        return 'default' if parent.name in ('herdr', 'herdr-dev') else parent.name
+    return os.environ.get('HERDR_SESSION')
 
 
 def locations(session):
@@ -213,7 +216,7 @@ def submit(paths, watched=False):
                     client.sendall(packet(request))
                     response = json.loads(client.makefile('rb').readline(LIMIT))
             except OSError as error:
-                raise RuntimeError('No active local receiver. Reconnect with herdr-yazi --remote HOST.') from error
+                raise RuntimeError('No active local receiver. Check herdr-yazi-saved-drag or reconnect with herdr-yazi --remote HOST.') from error
             if 'error' in response:
                 if watched and response['error'] == 'Only file path requests are accepted':
                     raise RuntimeError('Reconnect herdr-yazi: the running receiver predates task cancellation. '
