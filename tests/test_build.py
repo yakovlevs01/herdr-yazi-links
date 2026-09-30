@@ -77,6 +77,17 @@ fi
             self.assertEqual(self.executable.read_text(), 'new binary')
         self.assertEqual(self.run_build().returncode, 0)
 
+    def test_existing_worktree_is_reused_without_reinitializing(self):
+        repository = self.root / 'worktree-source'
+        self.source.rename(repository)
+        subprocess.run(['git', '-C', str(repository), 'worktree', 'add', '--detach', str(self.source)],
+                       check=True, capture_output=True)
+        self.assertTrue((self.source / '.git').is_file())
+        result = self.run_build()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.source / '.git').is_file())
+        self.assertEqual(self.executable.read_text(), 'new binary')
+
     def test_incompatible_patch_preserves_installed_binary(self):
         (self.source / 'demo.txt').write_text('upstream incompatible change\n')
         result = self.run_build()

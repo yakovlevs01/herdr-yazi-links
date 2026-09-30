@@ -4,7 +4,7 @@ The patch lets you Ctrl-click an existing path in ordinary terminal text. This c
 
 [Русский](patched-herdr.ru.md) · [Plugin without a patch](plugin.md)
 
-The source build pins Herdr 0.9.2. Run `./build.sh` for this version: the installer’s published downloads still contain the previous build. After a successful build, `install.sh` preserves the new executable using its build receipt.
+The source build pins Herdr 0.9.3. Run `./build.sh` for this version: the installer’s published downloads still contain the previous build. After a successful build, `install.sh` preserves the new executable using its build receipt.
 
 ## Build and launch
 

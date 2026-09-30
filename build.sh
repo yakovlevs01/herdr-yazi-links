@@ -20,7 +20,7 @@ command -v "${ZIG:-zig}" >/dev/null || { echo 'Set ZIG to the required Zig execu
 test "$("${ZIG:-zig}" version)" = "${upstream[3]}" || { echo "Expected Zig ${upstream[3]}" >&2; exit 1; }
 python3 -m unittest discover -s "$plugin_dir/tests" -v
 mkdir -p "$build_dir/bin"
-if [ ! -d "$source_dir/.git" ]; then
+if [ ! -e "$source_dir/.git" ]; then
     git init "$source_dir"
     git -C "$source_dir" remote add origin "$repository"
     git -C "$source_dir" fetch --depth 1 origin "$revision"

@@ -30,3 +30,5 @@ entry point and takes priority in zsh, including SSH. Saved clients must
 rediscover it. The `yazi-links` server starts through the user service;
 `update` and `channel` through this entry are rejected. Direct `/usr/bin/herdr`
 remains available and bypasses these rules. See [server management](server-management.md).
+
+To keep an official binary alongside the patched entry, install the official release as `~/.local/bin/herdr-stock`. `herdr` and `herdr-yazi` continue to use the patched build. Do not hand off a `yazi-links` session to `herdr-stock`, since that removes plain-text path activation from its server.
