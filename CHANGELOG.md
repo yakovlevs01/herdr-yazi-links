@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add opt-in `--patched-entry` for saved SSH machine discovery on Linux and macOS, preserving the previous executable and blocking upstream updates that remove the patch.
+
 - Preserve managed Linux services during live server handoff with `ExitType=cgroup` (systemd 250+); add isolated handoff checks for pane continuity and service lifetime.
 
 - Rebase the plain-text file click patch onto Herdr 0.9.2. Resolve paths using the terminal byte offsets, including Unicode, and preserve OSC 8 and web-link priority.

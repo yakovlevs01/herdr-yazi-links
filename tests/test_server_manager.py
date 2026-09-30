@@ -67,8 +67,8 @@ class ManagedServerTests(unittest.TestCase):
                 entry.main()
             execute.assert_not_called()
 
-    def test_upstream_update_cannot_overwrite_managed_binary(self):
-        with patch.object(Path, 'exists', return_value=True), \
+    def test_upstream_update_cannot_overwrite_unmanaged_patched_binary(self):
+        with patch.object(Path, 'exists', return_value=False), \
              patch.object(entry.sys, 'argv', ['herdr', 'update']), \
              patch.object(entry.os, 'execve') as execute:
             with self.assertRaisesRegex(SystemExit, 'tested build/install'):

@@ -63,3 +63,9 @@ On Linux/systemd with zsh, use `./install.sh --managed-server` to run the shared
 `yazi-links` server independently of SSH. Existing enabled installations retain
 this mode on reinstall. Headless hosts and other shells can use the ordinary
 installer. See [migration and maintenance](server-management.md).
+
+## Patched entry for saved SSH machines
+
+After building and validating the desired version, run `./install.sh --patched-entry` on the SSH host. It backs up the previous `~/.local/bin/herdr` and points that path to the verified build through `scripts/herdr-entry.py`. This mode supports Linux and macOS, does not enable systemd, and does not restart servers. Reinstallation preserves the choice. Ensure SSH discovery selects this entry; an existing client may need to reconnect.
+
+The entry rejects `update` and `channel` because the upstream updater removes the patch. Follow `patched-herdr.md` to update. To undo this mode, remove `.build/patched-entry.json` and restore the previous `~/.local/bin/herdr` backup. This does not change a running server.

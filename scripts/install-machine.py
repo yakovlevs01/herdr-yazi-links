@@ -200,6 +200,11 @@ def configure_checkout(root):
     link(canonical, root)
 
 
+def configure_patched_entry(root):
+    link(Path.home() / '.local/bin/herdr', root / 'scripts/herdr-entry.py')
+    (root / '.build/patched-entry.json').write_text(json.dumps({'enabled': True}) + '\n')
+
+
 def check(root, manifest, selected, sender_only):
     binary = root / '.build/bin/herdr'
     checks = {
@@ -210,6 +215,8 @@ def check(root, manifest, selected, sender_only):
         'remote checkout path': (Path.home() / 'pets/herdr-yazi-links').resolve() == root.resolve(),
         'launcher': (Path.home() / '.local/bin/herdr-yazi').resolve() == (root / 'herdr-yazi').resolve(),
     }
+    if (root / '.build/patched-entry.json').exists():
+        checks['patched SSH entry'] = (Path.home() / '.local/bin/herdr').resolve() == (root / 'scripts/herdr-entry.py').resolve()
     if (root / '.build/server-management.json').exists():
         checks['managed server unit'] = (Path.home() / '.config/systemd/user/herdr-yazi-server.service').exists()
         checks['managed server entry'] = (Path.home() / '.local/bin/herdr').resolve() == (root / 'scripts/herdr-entry.py').resolve()
@@ -247,6 +254,7 @@ def main():
     parser.add_argument('--sender-only', action='store_true', help='Skip local ripdrag/receiver on a machine used only as a remote sender')
     parser.add_argument('--check', action='store_true', help='Read-only installation check')
     parser.add_argument('--managed-server', action='store_true', help='Opt into Linux/systemd/zsh desktop server management')
+    parser.add_argument('--patched-entry', action='store_true', help='Use the patched binary through ~/.local/bin/herdr, including SSH discovery')
     args = parser.parse_args()
     try:
         selected = target()
@@ -270,6 +278,8 @@ def main():
         run([sys.executable, ROOT / 'scripts/install-drag.py'])
         link(Path.home() / '.local/bin/herdr-yazi', ROOT / 'herdr-yazi')
         configure_path(Path.home())
+        if args.patched_entry or (ROOT / '.build/patched-entry.json').exists():
+            configure_patched_entry(ROOT)
         if args.managed_server or (ROOT / '.build/server-management.json').exists():
             run([sys.executable, ROOT / 'scripts/install-server.py'])
         env = {key: value for key, value in os.environ.items() if not key.startswith('HERDR_')}

@@ -15,6 +15,24 @@ SPEC.loader.exec_module(INSTALL)
 
 
 class MachineInstallerTests(unittest.TestCase):
+    def test_patched_entry_preserves_previous_executable_and_is_repeatable(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.build').mkdir()
+            (root / 'scripts').mkdir()
+            (root / 'scripts/herdr-entry.py').write_text('entry')
+            (root / '.local/bin').mkdir(parents=True)
+            entry = root / '.local/bin/herdr'
+            entry.write_text('previous binary')
+            with patch.object(INSTALL.Path, 'home', return_value=root):
+                INSTALL.configure_patched_entry(root)
+                INSTALL.configure_patched_entry(root)
+            self.assertEqual(entry.resolve(), root / 'scripts/herdr-entry.py')
+            backups = list(entry.parent.glob('herdr.herdr-yazi-backup-*'))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(backups[0].read_text(), 'previous binary')
+            self.assertTrue((root / '.build/patched-entry.json').exists())
+
     def test_checkout_alias_is_created_without_replacing_other_checkout(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

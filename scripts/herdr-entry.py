@@ -38,7 +38,7 @@ def main():
     args = sys.argv[1:]
     session, command, starts = invocation(args, os.environ)
     managed = (ROOT / '.build/server-management.json').exists()
-    if managed and command and command[0] in ('update', 'channel'):
+    if command and command[0] in ('update', 'channel'):
         raise SystemExit('This Herdr belongs to herdr-yazi-links. Update through its tested build/install workflow.')
     if managed and session == 'yazi-links' and starts:
         subprocess.run([sys.executable, str(ROOT / 'scripts/server-manager.py'), 'ensure'], check=True)
