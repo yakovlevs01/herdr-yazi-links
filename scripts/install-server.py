@@ -25,7 +25,7 @@ def install():
     units.mkdir(parents=True, exist_ok=True)
     path = str(Path.home() / '.local/bin') + ':' + str(ROOT / '.build/bin') + ':/usr/local/bin:/usr/bin:/bin'
     unit = '\n'.join(['[Unit]', 'Description=Managed Herdr Yazi session', '', '[Service]',
-        'Type=exec', 'WorkingDirectory=%h',
+        'Type=exec', 'ExitType=cgroup', 'WorkingDirectory=%h',
         'ExecStart='+quote(sys.executable)+' '+quote(ROOT / 'scripts/server-manager.py')+' serve',
         'Environment='+quote('PATH='+path),
         'UnsetEnvironment=SSH_CONNECTION SSH_CLIENT SSH_TTY SSH_AUTH_SOCK XDG_SESSION_ID XDG_SESSION_TYPE',

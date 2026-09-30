@@ -1,25 +1,39 @@
 diff --git a/src/app/actions.rs b/src/app/actions.rs
-index d5d13d5..5746f99 100644
+index e1ae2ffc..579caa1c 100644
 --- a/src/app/actions.rs
 +++ b/src/app/actions.rs
-@@ -1151,7 +1151,60 @@ fn url_at_runtime_cell(
-         .find('\n')
-         .map_or(visible_text.len(), |idx| logical_cell.byte_index + idx);
-     let line = visible_text.get(line_start..line_end)?;
--    url_at_column(line, logical_cell.logical_col).map(str::to_owned)
-+    url_at_column(line, logical_cell.logical_col)
-+        .map(str::to_owned)
-+        .or_else(|| {
-+            // Resolve on the server that owns the pane, and only on a click.
-+            // Never stat paths in the render/PTY parsing hot paths.
-+            let cwd = runtime.follow_cwd()?;
-+            file_url_at_column(line, logical_cell.logical_col, &cwd)
-+        })
+@@ -1023,15 +1023,76 @@ impl AppState {
+     }
+ }
+ 
++#[cfg(test)]
+ pub(super) fn url_from_link_target(target: crate::ghostty::LinkTarget) -> Option<String> {
++    url_from_link_target_with_cwd(target, || None)
 +}
 +
-+fn file_url_at_column(row: &str, col: u16, cwd: &std::path::Path) -> Option<String> {
++pub(super) fn url_from_link_target_with_cwd(
++    target: crate::ghostty::LinkTarget,
++    cwd: impl FnOnce() -> Option<std::path::PathBuf>,
++) -> Option<String> {
+     match target {
+         crate::ghostty::LinkTarget::Uri(uri) => Some(uri),
+         crate::ghostty::LinkTarget::Text { text, clicked_byte } => {
+-            url_at_byte(&text, clicked_byte).map(str::to_owned)
++            url_at_byte(&text, clicked_byte)
++                .map(str::to_owned)
++                .or_else(|| {
++                    // Resolve only on activation, on the server owning the pane.
++                    // Hover and rendering must never perform filesystem I/O.
++                    file_url_at_byte(&text, clicked_byte, &cwd()?)
++                })
+         }
+     }
+ }
+ 
++fn file_url_at_byte(row: &str, clicked_byte: usize, cwd: &std::path::Path) -> Option<String> {
 +    let cells = text_cells(row);
-+    let clicked_idx = cell_index_at_column(&cells, col)?;
++    let clicked_idx = row.get(..clicked_byte)?.chars().count();
++    cells.get(clicked_idx)?;
 +    let span = quoted_path_span_at_column(&cells, clicked_idx)
 +        .or_else(|| token_span_at_column(&cells, clicked_idx))?;
 +    let token =
@@ -61,10 +75,12 @@ index d5d13d5..5746f99 100644
 +    } else {
 +        cwd.join(path)
 +    })
- }
- 
++}
++
  pub(crate) fn safe_web_url(url: &str) -> Option<&str> {
-@@ -2522,6 +2575,96 @@ mod tests {
+     (url.starts_with("http://") || url.starts_with("https://")).then_some(url)
+ }
+@@ -2533,6 +2594,126 @@ mod tests {
          assert_eq!(selected_url("open file:///tmp/report", "file"), None);
      }
  
@@ -92,22 +108,52 @@ index d5d13d5..5746f99 100644
 +            file.to_str().unwrap(),
 +        ] {
 +            let row = format!("Изменён `{token}`, готово.");
-+            let result = file_url_at_column(&row, col_of(&row, token), &root).unwrap();
++            let result = file_url_at_byte(&row, row.find(token).unwrap(), &root).unwrap();
 +            assert!(result.starts_with("file:///"), "{result}");
 +            assert!(!result.contains('`'));
 +            if token.contains("отчёт") {
 +                assert!(result.ends_with("%D0%BE%D1%82%D1%87%D1%91%D1%82.rs"));
 +            }
 +        }
-+        assert!(file_url_at_column("../README.md", 3, &dir).is_some());
-+        assert!(file_url_at_column("README.md", 0, &dir).is_none());
++        assert!(file_url_at_byte("../README.md", 3, &dir).is_some());
++        assert!(file_url_at_byte("README.md", 0, &dir).is_none());
 +        for row in [
 +            "missing.rs",
 +            "https://example.com/README.md",
 +            "README.md:12:3",
 +            " ",
 +        ] {
-+            assert_eq!(file_url_at_column(row, 0, &root), None, "{row}");
++            assert_eq!(file_url_at_byte(row, 0, &root), None, "{row}");
++        }
++    }
++
++    #[test]
++    fn file_links_use_terminal_byte_offsets_and_preserve_uri_priority() {
++        use crate::ghostty::LinkTarget;
++        let root = std::env::temp_dir().join(format!("herdr-byte-links-{}", std::process::id()));
++        std::fs::create_dir_all(&root).unwrap();
++        std::fs::write(root.join("отчёт.txt"), "test").unwrap();
++        let row = "界 e\u{301} `отчёт.txt`";
++        let clicked_byte = row.find("чёт").unwrap();
++        let target = LinkTarget::Text {
++            text: row.into(),
++            clicked_byte,
++        };
++        let uri = url_from_link_target_with_cwd(target, || Some(root.clone())).unwrap();
++        assert!(uri.ends_with("%D0%BE%D1%82%D1%87%D1%91%D1%82.txt"));
++        assert!(file_url_at_byte(row, clicked_byte + 1, &root).is_none());
++        assert!(file_url_at_byte(row, row.len(), &root).is_none());
++        for target in [
++            LinkTarget::Uri("file:///explicit.txt".into()),
++            LinkTarget::Text {
++                text: "https://example.com/path".into(),
++                clicked_byte: 8,
++            },
++        ] {
++            assert!(
++                url_from_link_target_with_cwd(target, || panic!("URI must not resolve cwd"))
++                    .is_some()
++            );
 +        }
 +    }
 +
@@ -153,11 +199,30 @@ index d5d13d5..5746f99 100644
 +        std::fs::create_dir(&dir).unwrap();
 +        std::fs::write(dir.join("a#b%.txt"), "example").unwrap();
 +        let row = "См. `my files/a#b%.txt`.";
-+        let uri = file_url_at_column(row, col_of(row, "files"), &root).unwrap();
++        let uri = file_url_at_byte(row, row.find("files").unwrap(), &root).unwrap();
 +        assert!(uri.ends_with("my%20files/a%23b%25.txt"));
-+        assert_eq!(file_url_at_column(row, col_of(row, "См"), &root), None);
++        assert_eq!(file_url_at_byte(row, row.find("См").unwrap(), &root), None);
 +    }
 +
      #[test]
      fn apply_workspace_git_statuses_updates_matching_workspace() {
          let mut state = app_with_workspaces(&["one", "two"]);
+diff --git a/src/app/api/plugins/mod.rs b/src/app/api/plugins/mod.rs
+index c9b37bfe..0958fb62 100644
+--- a/src/app/api/plugins/mod.rs
++++ b/src/app/api/plugins/mod.rs
+@@ -333,9 +333,11 @@ impl App {
+     ) -> String {
+         let (pane_id, url) =
+             match self.read_checked_pane_link(&id, &params, "activation", |runtime, col, row| {
+-                runtime
+-                    .link_target_at(col, row)
+-                    .and_then(crate::app::actions::url_from_link_target)
++                runtime.link_target_at(col, row).and_then(|target| {
++                    crate::app::actions::url_from_link_target_with_cwd(target, || {
++                        runtime.follow_cwd()
++                    })
++                })
+             }) {
+                 Ok(value) => value,
+                 Err(error) => return error,

@@ -15,9 +15,9 @@ The plugin and build support in this repository are distributed under Apache-2.0
 
 Release 0.4.0 distributes the already tested patched Herdr binaries for Linux
 x86_64 and macOS ARM64. Their upstream revision is
-`61ca85d5895bb530b59da85beeccdd767f4720d2`; the changes are in
+`48292af8e33a08c8030b7f1512c8d0da739f5ab1`; the changes are in
 `patches/herdr-path-click.patch`. The repository LICENSE contains Apache-2.0.
 Upstream source and dependency notices remain available in
-[the pinned Herdr source](https://github.com/herdrdev/herdr/tree/61ca85d5895bb530b59da85beeccdd767f4720d2).
+[the pinned Herdr source](https://github.com/herdrdev/herdr/tree/48292af8e33a08c8030b7f1512c8d0da739f5ab1).
 The installer downloads Yazi from its official release and installs ripdrag
 through Cargo; their respective upstream licenses apply.

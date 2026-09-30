@@ -34,6 +34,7 @@ def until(function, description, timeout=15):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--herdr', default='herdr', help='Exact executable to test')
+    parser.add_argument('--handoff-to', type=Path, help='Hand off the isolated local server to this binary before click checks')
     parser.add_argument('--expect-paths', action='store_true', help='Require the plain-text path patch')
     parser.add_argument('--expect-home-paths', action='store_true', help='Require ~/ path expansion in a local test')
     parser.add_argument('--plugin', type=Path, default=ROOT)
@@ -41,6 +42,8 @@ def main():
     parser.add_argument('--remote-root', help='Absolute plugin checkout path on the SSH host')
     parser.add_argument('--client-arg', action='append', default=[], help='Extra client argument, repeatable; use --client-arg=--flag')
     args = parser.parse_args()
+    if args.handoff_to and args.remote:
+        parser.error('--handoff-to currently requires a local test')
     if args.expect_home_paths and args.remote:
         parser.error('--expect-home-paths currently requires a local test')
     if bool(args.remote) != bool(args.remote_root):
@@ -128,7 +131,8 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
             subprocess.run(cli + ['plugin', 'link', str(args.plugin.resolve())], env=env, check=True,
                            stdout=subprocess.DEVNULL, timeout=15)
         master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 120, 0, 0))
+        slave_name = os.ttyname(slave)
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 200, 0, 0))
         transcript = bytearray()
         def drain():
             try:
@@ -166,6 +170,29 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
                 command = 'sh -c ' + shlex.quote('cd ' + shlex.quote(remote_tmp) + ' && exec ' + command)
             api('pane.send_input', {'pane_id': source, 'text': 'exec ' + command, 'keys': ['enter']})
             until(lambda: 'OSC_LINK' in text(source), 'fixture output')
+            if args.handoff_to:
+                before = api('pane.process_info', {'pane_id': source})['process_info']
+                subprocess.run(cli + ['server', 'live-handoff', '--import-exe', str(args.handoff_to.resolve())],
+                               env=env, check=True, timeout=40)
+                after = api('pane.process_info', {'pane_id': source})['process_info']
+                for key in ('pane_id', 'shell_pid', 'foreground_process_group_id'):
+                    if before[key] != after[key]:
+                        raise RuntimeError('Handoff changed ' + key)
+                until(lambda: 'OSC_LINK' in text(source), 'renderer preserved after handoff')
+                # Herdr deliberately disconnects the old client during handoff.
+                client.wait(timeout=10)
+                reader.join(timeout=2)
+                slave = os.open(slave_name, os.O_RDWR | os.O_NOCTTY)
+                client = subprocess.Popen([str(args.handoff_to.resolve()), '--session', session, *args.client_arg],
+                                          env=env, cwd=fixture, stdin=slave, stdout=slave, stderr=slave,
+                                          start_new_session=True)
+                os.close(slave)
+                reader = threading.Thread(target=drain, daemon=True)
+                reader.start()
+                time.sleep(1)
+                api('pane.send_input', {'pane_id': source, 'text': 'osc', 'keys': ['enter']})
+                until(lambda: 'OSC_LINK' in text(source), 'renderer redraw after reconnect')
+                print('PASS live handoff preserves pane and process IDs; new client reconnects', flush=True)
             os.write(master, b'\x1b[I')
             time.sleep(0.3)
             cases = [('osc', 'OSC_LINK', True),
@@ -197,10 +224,15 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
                     if len(api('plugin.log.list', {'plugin_id': 'local.yazi-links'})['logs']) != before_logs:
                         raise RuntimeError(mode + ': unexpected plugin invocation')
                 print('PASS ' + mode + (' opens Yazi' if should_open else ' does not open Yazi'), flush=True)
-            print('PASS executable: ' + binary, flush=True)
+            print('PASS executable: ' + str(args.handoff_to.resolve() if args.handoff_to else binary), flush=True)
             if args.remote:
                 print('PASS remote host: ' + args.remote, flush=True)
         except Exception:
+            try:
+                for pane in panes():
+                    sys.stderr.write('Pane ' + pane['pane_id'] + ':\n' + text(pane['pane_id']) + '\n')
+            except Exception:
+                pass
             sys.stderr.write(transcript.decode(errors='replace')[-2500:].replace('\x1b', '<ESC>') + '\n')
             raise
         finally:

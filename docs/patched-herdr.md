@@ -4,6 +4,8 @@ The patch lets you Ctrl-click an existing path in ordinary terminal text. This c
 
 [Русский](patched-herdr.ru.md) · [Plugin without a patch](plugin.md)
 
+The source build pins Herdr 0.9.2. Run `./build.sh` for this version: the installer’s published downloads still contain the previous build. After a successful build, `install.sh` preserves the new executable using its build receipt.
+
 ## Build and launch
 
 Install the toolchain versions recorded in [patches/upstream.toml](../patches/upstream.toml), plus Python 3.11+, Git and Bash 4+. The current pin uses Rust 1.98.1 and Zig 0.16.0. The build and automated checks require Linux, Yazi in PATH, rustup, a C/C++ compiler and pkg-config. From the repository:

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Preserve managed Linux services during live server handoff with `ExitType=cgroup` (systemd 250+); add isolated handoff checks for pane continuity and service lifetime.
+
+- Rebase the plain-text file click patch onto Herdr 0.9.2. Resolve paths using the terminal byte offsets, including Unicode, and preserve OSC 8 and web-link priority.
+- Keep filesystem checks on click activation only; link hover remains free of filesystem access.
+- Build from source for this revision. Published v0.4.0 prebuilt downloads are unchanged; verified local build receipts prevent the installer from replacing a new build with them.
+
 ## 0.5.0 (2026-09-24)
 
 - Maintain local Yazi drag receivers for enabled saved SSH machines, with independent reconnects, profile refresh, and reuse by standalone remote clients.

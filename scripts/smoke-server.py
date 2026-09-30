@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise managed server isolation using a disposable service and config only."""
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -8,9 +9,9 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-name = 'herdr-yazi-check-' + str(os.getpid())
+name = 'hy-check-' + str(os.getpid())
 unit = name + '.service'
-with tempfile.TemporaryDirectory(prefix=name) as temp:
+with tempfile.TemporaryDirectory(prefix='hy-') as temp:
     root = Path(temp)
     (root / 'scripts').mkdir()
     (root / '.build/bin').mkdir(parents=True)
@@ -29,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix=name) as temp:
                 caller.update(SSH_CONNECTION='test-remote', SSH_CLIENT='test', XDG_SESSION_TYPE='tty')
                 caller.pop('DISPLAY', None)
                 caller.pop('WAYLAND_DISPLAY', None)
-            subprocess.run(['systemd-run', '--user', '--unit', name, '--collect',
+            subprocess.run(['systemd-run', '--user', '--unit', name, '--collect', '--property=ExitType=cgroup',
                             '--setenv=XDG_CONFIG_HOME='+str(root / 'config'),
                             sys.executable, str(script), 'serve'], env=caller, check=True)
             for _ in range(100):
@@ -45,6 +46,15 @@ with tempfile.TemporaryDirectory(prefix=name) as temp:
             assert values.get(b'DISPLAY') or values.get(b'WAYLAND_DISPLAY'), 'Desktop missing'
             assert unit in Path('/proc/'+pid+'/cgroup').read_text()
             assert os.getsid(int(pid)) == int(pid), 'Remote daemon SID check would fail'
+            before = json.loads(result.stdout)['result']['panes']
+            identities = lambda rows: [p['pane_id'] for p in rows]
+            subprocess.run([binary, '--session', name, 'server', 'live-handoff', '--import-exe', binary],
+                           env=env, check=True, timeout=40)
+            time.sleep(1)
+            subprocess.run(['systemctl', '--user', 'is-active', '--quiet', unit], check=True)
+            after = json.loads(subprocess.check_output([binary, '--session', name, 'pane', 'list'], env=env))['result']['panes']
+            assert identities(before) == identities(after), 'Handoff changed pane IDs'
+            print('PASS '+origin+': service and panes survive live handoff')
             print('PASS '+origin+': pinned server ready, desktop environment, no SSH variables, service cgroup, detached SID')
             subprocess.run(['systemctl', '--user', 'stop', unit], check=True)
     finally:

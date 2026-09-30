@@ -65,3 +65,5 @@ To remove the integration, save work and stop the service, remove the managed
 `~/.local/bin/herdr` link and restore its backup if present, remove the added
 `.zshenv` block, `.build/server-management.json`, and the unit file, then run
 `systemctl --user daemon-reload`.
+
+The service uses `ExitType=cgroup` so the old server exiting during `server live-handoff` does not stop the replacement server and panes. This requires systemd 250 or newer. Before a live handoff, update the unit with `python3 scripts/install-server.py`; it reloads systemd configuration without stopping the service.

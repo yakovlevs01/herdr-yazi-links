@@ -125,3 +125,11 @@ not route requests by the originating TUI client.
 - The 0.5.0 preparation adds tests for managed startup failure, update protection, installer idempotence, and local build receipts. Build and final check results are recorded below.
 
 Final 0.5.0 checks: 87 Python tests and 77 targeted Rust tests passed. The release build passed OSC 8, relative, absolute, home, missing-home and missing-file terminal click checks. Both disposable systemd startup scenarios passed. `install.sh --check` passes every check with the generated local build receipt. Shell syntax and `git diff --check` pass. The production service remains active with PID 151035; publication did not restart it.
+
+## Herdr 0.9.2 source update
+
+Pinned upstream `48292af8e33a08c8030b7f1512c8d0da739f5ab1` with Rust 1.98.1 and Zig 0.16.0. On Linux, all 87 Python tests and 98 focused Herdr action tests pass. Real terminal Ctrl-click checks pass for OSC 8, relative, absolute and home paths; missing paths do not open a pane. The test terminal is 200 columns wide so the full selected filename fits in Yazi’s status line after its asynchronous metadata refresh.
+
+The isolated 0.9.0-to-0.9.2 live handoff preserves the pane ID, shell PID and foreground process group. The old client disconnects as designed; a new client reconnects, the fixture redraws its OSC 8 link, and all click checks pass. Imported terminal IDs are regenerated and are not process identity. The systemd smoke verifies that `ExitType=cgroup` retains the service and pane IDs through handoff from local and SSH-like caller environments.
+
+On the local managed `yazi-links` session, the 0.9.2 server is active, the current agent’s shell and foreground PIDs remain unchanged, and `install.sh --check` passes. Live handoff requires clients to reconnect; it is not a restart of pane processes.
