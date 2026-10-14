@@ -33,7 +33,8 @@ class ManagedServerTests(unittest.TestCase):
                 self.assertTrue(manager.desktop_ready(env))
 
     def test_start_routes_both_remote_bridge_and_local_attach(self):
-        for args in [[], ['server'], ['remote-client-bridge'], ['--session', 'yazi-links'],
+        for args in [[], ['server'], ['remote-client-bridge'],
+                     ['remote-client-bridge', '--idle-timeout-v1'], ['--session', 'yazi-links'],
                      ['session', 'attach', 'yazi-links']]:
             self.assertEqual(entry.invocation(args, {'HERDR_SESSION': 'yazi-links'})[::2], ('yazi-links', True))
         for args in [['pane', 'list'], ['--remote', 'mac'], ['--help'], ['server', 'stop']]:
@@ -60,7 +61,7 @@ class ManagedServerTests(unittest.TestCase):
         import subprocess
         with patch.object(entry, 'ROOT', ROOT), \
              patch.object(Path, 'exists', return_value=True), \
-             patch.object(entry.sys, 'argv', ['herdr', '--session', 'yazi-links', 'remote-client-bridge']), \
+             patch.object(entry.sys, 'argv', ['herdr', '--session', 'yazi-links', 'remote-client-bridge', '--idle-timeout-v1']), \
              patch.object(entry.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['ensure'])), \
              patch.object(entry.os, 'execve') as execute:
             with self.assertRaises(subprocess.CalledProcessError):

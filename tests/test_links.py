@@ -42,9 +42,53 @@ class YaziLinksTests(unittest.TestCase):
 
     def test_run_uses_argv_without_shell(self):
         value = "/tmp/a;echo wrong"
-        with patch.dict(os.environ, {"YAZI_LINK_PATH": value}), patch.object(links.sys, "argv", ["open.py", "run"]), patch.object(links.os, "execvp") as execute:
+        with patch.dict(os.environ, {"YAZI_LINK_PATH": value}), patch.object(links.sys, "argv", ["open.py", "run"]), patch.object(links.os, "execvpe") as execute:
             links.main()
-        execute.assert_called_once_with("yazi", ["yazi", value])
+        self.assertEqual(execute.call_args.args[:2], ("yazi", ["yazi", value]))
+        self.assertEqual(execute.call_args.args[2]["YAZI_LINK_PATH"], value)
+
+    def test_click_passes_only_allowed_client_context_to_new_pane(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "index.html"
+            path.touch()
+            context = {"focused_pane_id": "w9:p7", "client_context": {
+                "local_to_server": True,
+                "desktop_env": {"DISPLAY": ":1", "PATH": "/untrusted", "TOKEN": "secret"}}}
+            env = {"HERDR_PLUGIN_CLICKED_URL": path.as_uri(),
+                   "HERDR_PLUGIN_CONTEXT_JSON": json.dumps(context)}
+            with patch.dict(os.environ, env), patch.object(links.shutil, "which", return_value="/usr/bin/yazi"), patch.object(links, "request") as request:
+                links.click()
+            pane_env = request.call_args.args[1]["env"]
+            self.assertEqual(json.loads(pane_env[links.CLIENT_CONTEXT_KEY]), {
+                "local_to_server": True, "desktop_env": {"DISPLAY": ":1"}})
+
+    def test_desktop_and_remote_clients_do_not_change_each_others_environment(self):
+        server = {"DISPLAY": ":old", "WAYLAND_DISPLAY": "old", "PATH": "/bin",
+                  "DBUS_SESSION_BUS_ADDRESS": "old", "SSH_CONNECTION": "old ssh",
+                  "XDG_SESSION_ID": "old"}
+        original = server.copy()
+        for desktop in ({"DISPLAY": ":1"}, {"WAYLAND_DISPLAY": "wayland-2"}):
+            local = links.yazi_environment({**server, links.CLIENT_CONTEXT_KEY: json.dumps({
+                "local_to_server": True, "desktop_env": desktop})})
+            self.assertEqual(local, {"PATH": "/bin", "HERDR_DRAG_LOCAL": "1", **desktop})
+            remote = links.yazi_environment({**server, links.CLIENT_CONTEXT_KEY: json.dumps({
+                "local_to_server": False, "desktop_env": desktop})})
+            self.assertEqual(remote, {"PATH": "/bin", "HERDR_DRAG_LOCAL": "0"})
+        self.assertEqual(server, original)
+
+    def test_explicit_local_tty_clears_stale_desktop_but_legacy_keeps_it(self):
+        server = {"DISPLAY": ":old", "PATH": "/bin"}
+        self.assertEqual(links.yazi_environment(server), server)
+        self.assertEqual(links.yazi_environment({**server, links.CLIENT_CONTEXT_KEY: json.dumps({
+            "local_to_server": True, "desktop_env": {}})}), {"PATH": "/bin", "HERDR_DRAG_LOCAL": "1"})
+
+    def test_malformed_context_is_rejected_before_exec(self):
+        for value in ([], {}, {"local_to_server": "false"},
+                      {"local_to_server": True, "desktop_env": []},
+                      {"local_to_server": True, "desktop_env": {"DISPLAY": "a\0b"}},
+                      {"local_to_server": True, "desktop_env": {"DISPLAY": 1}}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                links.client_context(value)
 
 
 if __name__ == "__main__":

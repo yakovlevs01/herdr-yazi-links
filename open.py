@@ -12,6 +12,48 @@ import subprocess
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent
+DESKTOP_KEYS = frozenset({
+    "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+})
+CLIENT_CONTEXT_KEY = "YAZI_LINK_CLIENT_CONTEXT"
+
+
+def client_context(value):
+    """Validate and minimize the optional, client-reported click context."""
+    if value is None:
+        return None  # Older Herdr clients retain their existing behavior.
+    if not isinstance(value, dict) or type(value.get("local_to_server")) is not bool:
+        raise ValueError("Некорректный контекст клиента Herdr")
+    supplied = value.get("desktop_env", {})
+    if not isinstance(supplied, dict):
+        raise ValueError("Некорректное окружение клиента Herdr")
+    desktop = {}
+    if value["local_to_server"]:
+        for key in DESKTOP_KEYS:
+            item = supplied.get(key)
+            if item is not None:
+                if not isinstance(item, str) or "\0" in item or len(item) > 8192:
+                    raise ValueError(f"Некорректное значение {key}")
+                if item:
+                    desktop[key] = item
+    return {"local_to_server": value["local_to_server"], "desktop_env": desktop}
+
+
+def yazi_environment(environ):
+    """Build one child environment without mutating the server or other panes."""
+    result = dict(environ)
+    raw = result.pop(CLIENT_CONTEXT_KEY, None)
+    context = client_context(json.loads(raw)) if raw is not None else None
+    if context is not None:
+        for key in DESKTOP_KEYS:
+            result.pop(key, None)
+        # The server may itself have been launched by a different SSH client.
+        for key in ("SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY", "XDG_SESSION_ID"):
+            result.pop(key, None)
+        result.update(context["desktop_env"])
+        result["HERDR_DRAG_LOCAL"] = "1" if context["local_to_server"] else "0"
+    return result
 
 
 def yazi_command():
@@ -59,6 +101,10 @@ def click():
         raise RuntimeError("yazi отсутствует в PATH сервера Herdr")
     context = json.loads(os.environ["HERDR_PLUGIN_CONTEXT_JSON"])
     pane_id = context["focused_pane_id"]
+    pane_env = {"YAZI_LINK_PATH": str(path)}
+    origin = client_context(context.get("client_context"))
+    if origin is not None:
+        pane_env[CLIENT_CONTEXT_KEY] = json.dumps(origin)
     return request("plugin.pane.open", {
         "plugin_id": "local.yazi-links",
         "entrypoint": "yazi",
@@ -67,7 +113,7 @@ def click():
         "direction": "right",
         "cwd": str(path if path.is_dir() else path.parent),
         "focus": True,
-        "env": {"YAZI_LINK_PATH": str(path)},
+        "env": pane_env,
     })
 
 
@@ -78,7 +124,9 @@ def main():
         # argv, not shell source: punctuation in a filename cannot execute code.
         path = os.environ["YAZI_LINK_PATH"]
         command = yazi_command()
-        os.execvp(command, [command, path])
+        env = yazi_environment(os.environ)
+        env["PATH"] = str(ROOT / "desktop-bin") + os.pathsep + env.get("PATH", "")
+        os.execvpe(command, [command, path], env)
     else:
         raise ValueError("Usage: open.py click|run")
 

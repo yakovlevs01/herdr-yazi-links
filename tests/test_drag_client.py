@@ -99,6 +99,40 @@ class RemoteClientTests(unittest.TestCase):
         receiver.wait.assert_called_once()
         self.assertEqual({sig: signal.getsignal(sig) for sig in original}, original)
 
+    def test_scoped_client_never_borrows_a_legacy_saved_receiver(self):
+        receiver = self.receiver()
+        herdr = Mock(returncode=0)
+        herdr.poll.return_value = 0
+        env = {'HERDR_DRAG_RECEIVER_ID': 'a' * 32}
+        with patch.object(launcher, 'managed_receiver', return_value=True) as legacy, patch.object(launcher.subprocess, 'Popen', side_effect=[receiver, herdr]) as spawn, patch.object(launcher.select, 'select', return_value=([receiver.stdout], [], [])):
+            self.assertEqual(launcher.remote_client('/herdr', [], env, 'host', 'work', '/python'), 0)
+            legacy.assert_not_called()
+            self.assertTrue(all(call.kwargs['env'] == env for call in spawn.call_args_list))
+        receiver.terminate.assert_called_once()
+
+    def test_local_ui_exit_reaps_owned_receiver_and_preserves_exit_status(self):
+        receiver, herdr = Mock(), Mock()
+        herdr.wait.return_value = 23
+        herdr.poll.return_value = 23
+        env = {'HERDR_DRAG_RECEIVER_ID': 'b' * 32}
+        with patch.object(launcher.subprocess, 'Popen', side_effect=[receiver, herdr]) as spawn:
+            self.assertEqual(launcher.local_client(['/herdr', '--session', 'work'], env), 23)
+            self.assertIn('--parent-pid', spawn.call_args_list[0].args[0])
+            self.assertTrue(all(call.kwargs['env'] == env for call in spawn.call_args_list))
+        receiver.terminate.assert_called_once()
+        receiver.wait.assert_called_once()
+        herdr.terminate.assert_not_called()
+
+    def test_local_ui_spawn_failure_still_reaps_receiver(self):
+        receiver = Mock()
+        original = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGHUP)}
+        with patch.object(launcher.subprocess, 'Popen', side_effect=[receiver, OSError('missing client')]):
+            with self.assertRaisesRegex(OSError, 'missing client'):
+                launcher.local_client(['/missing'], {})
+        receiver.terminate.assert_called_once()
+        receiver.wait.assert_called_once()
+        self.assertEqual({sig: signal.getsignal(sig) for sig in original}, original)
+
 
 class ReceiverTests(unittest.TestCase):
     def test_running_and_queued_cancellation_skip_ripdrag_and_keep_receiver_alive(self):
@@ -256,6 +290,75 @@ class ReceiverTests(unittest.TestCase):
                 else:
                     self.assertEqual(terminal[0]['state'], 'error')
                     self.assertFalse(any(f.get('percent') == 100 for f in frames))
+
+
+class DesktopReceiverTests(unittest.TestCase):
+    def run_job(self, action='open', platform='linux', exit_codes=(None, None)):
+        finished = threading.Event()
+        frames = []
+        job = {'paths': ['/server/one', '/server/two'], 'action': action,
+               'receiver': 'connection-token', 'id': 'd' * 32}
+        packets = [client.packet({'ready': 'connection-token'}), client.packet(job)]
+
+        class Input(io.BytesIO):
+            def write(self, data):
+                frame = json.loads(data)
+                frames.append(frame)
+                if frame.get('state') in ('done', 'error'):
+                    finished.set()
+                return super().write(data)
+
+        class Output:
+            def close(self):
+                pass
+
+            def readline(self, _):
+                if packets:
+                    return packets.pop(0)
+                if not finished.wait(5):
+                    raise AssertionError('Receiver failed to complete request')
+                return b''
+
+        with tempfile.TemporaryDirectory() as cache:
+            copies = [Path(cache) / 'transfer/0000/a \";$(touch NEVER).html',
+                      Path(cache) / 'transfer/0001/雪\n.txt']
+            ssh = Mock(stdout=Output(), stdin=Input())
+            windows = [Mock(returncode=code, poll=Mock(return_value=code)) for code in exit_codes]
+            with patch.dict(os.environ, {'HERDR_DRAG_CACHE': cache, 'HERDR_DRAG_RECEIVER_ID': 'a' * 32}, clear=True), patch.object(sys, 'argv', ['drag-client.py', 'host', 'work']), patch.object(sys, 'platform', platform), patch.object(client.shutil, 'which', return_value='/bin/ripdrag'), patch.object(client.subprocess, 'Popen', side_effect=[ssh, *windows]) as spawn, patch.object(client.select, 'select', return_value=([ssh.stdout], [], [])), patch.object(client, 'download', return_value=copies) as download, patch('builtins.print'):
+                if action not in ('drag', 'open'):
+                    with self.assertRaisesRegex(ValueError, 'Only drag and open'):
+                        client.main()
+                    download.assert_not_called()
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'SSH connection closed'):
+                        client.main()
+                    self.assertEqual(download.call_args.args[1], job['paths'])
+                calls = [call.args[0] for call in spawn.call_args_list]
+            return calls, frames, list(map(str, copies))
+
+    def test_remote_open_dispatches_all_downloaded_copies_to_native_opener(self):
+        for platform, opener in [('linux', '/usr/bin/xdg-open'), ('darwin', '/usr/bin/open')]:
+            with self.subTest(platform=platform):
+                calls, frames, copies = self.run_job(platform=platform)
+                self.assertIn('work@' + 'a' * 32, calls[0][-1])
+                self.assertCountEqual(calls[1:], [[opener, copy] for copy in copies])
+                self.assertEqual([f['state'] for f in frames if f.get('state') in ('done', 'error')], ['done'])
+
+    def test_failure_of_any_opener_never_reports_success(self):
+        for codes in [(7, None), (None, 7)]:
+            with self.subTest(codes=codes):
+                _, frames, _ = self.run_job(exit_codes=codes)
+                self.assertEqual([f['state'] for f in frames if f.get('state') in ('done', 'error')], ['error'])
+                self.assertFalse(any(f.get('percent') == 100 for f in frames))
+
+    def test_drag_still_uses_one_window_and_all_downloaded_paths(self):
+        calls, frames, copies = self.run_job(action='drag', exit_codes=(None,))
+        self.assertEqual(calls[1:], [['/bin/ripdrag', '-x', '-a', '-n', '-b', *copies]])
+        self.assertEqual(frames[-1]['state'], 'done')
+
+    def test_unknown_wire_action_never_downloads_or_starts_a_window(self):
+        calls, _, _ = self.run_job(action='shell', exit_codes=())
+        self.assertEqual(len(calls), 1)
 
 
 if __name__ == '__main__':

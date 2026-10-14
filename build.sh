@@ -35,8 +35,17 @@ fi
 cd "$source_dir"
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-"$build_dir/target"}
 cargo +"$toolchain" test --locked --bin herdr app::actions::tests::
+cargo +"$toolchain" test --locked --bin herdr link_
+cargo +"$toolchain" test --locked --bin herdr server::client_commands::tests::
+cargo +"$toolchain" test --locked --bin herdr client::shell::tests::mouse_selection::
+cargo +"$toolchain" test --locked --bin herdr desktop
+cargo +"$toolchain" test --locked --bin herdr clipboard -- --test-threads=1
+cargo +"$toolchain" test --locked --bin herdr generated_protocol_schema_artifact_is_current
 cargo +"$toolchain" build --locked --release
 python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-home-paths --plugin "$plugin_dir"
+python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-home-paths --expect-client-context local --plugin "$plugin_dir"
+python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-client-context ssh --plugin "$plugin_dir"
+python3 "$plugin_dir/scripts/desktop-smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --handoff-to "$CARGO_TARGET_DIR/release/herdr"
 # Replace atomically; an already running server keeps its old executable.
 candidate=$(mktemp "$build_dir/bin/herdr.XXXXXXXX")
 trap 'rm -f -- "$candidate"' EXIT

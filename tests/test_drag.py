@@ -96,6 +96,79 @@ class BrokerTests(unittest.TestCase):
         self.assertEqual(job['id'], json.loads(result.stdout)['id'])
         self.assertIn('test computer', json.loads(result.stdout)['message'])
 
+    def test_two_clients_of_same_session_have_independent_receivers(self):
+        scopes = [self.session + '@' + letter * 32 for letter in ('a', 'b')]
+        brokers = [self.start(scope, owner) for scope, owner in zip(scopes, ['Mac', 'IW'])]
+        greetings = [self.read(broker) for broker in brokers]
+        for scope, broker, greeting, path in zip(scopes, brokers, greetings, ['/mac.txt', '/iw.txt']):
+            result = self.request({'paths': [path], 'action': 'open'}, session=scope)
+            job = self.read(broker)
+            self.assertEqual(job['paths'], [path])
+            self.assertEqual(job['action'], 'open')
+            self.assertEqual(job['receiver'], greeting['ready'])
+            self.assertEqual(job['id'], result['id'])
+        self.assertNotEqual(greetings[0]['ready'], greetings[1]['ready'])
+
+    def test_submit_and_watch_use_exact_client_scope_when_legacy_is_also_online(self):
+        legacy = self.start()
+        self.read(legacy)
+        scope = self.session + '@' + 'a' * 32
+        receiver = self.start(scope, 'Mac')
+        self.read(receiver)
+        env = dict(self.env, HERDR_SESSION=self.session, HERDR_DRAG_LOCAL='1')
+        route = {'local_to_server': False, 'receiver_id': 'a' * 32}
+        with patch.dict(os.environ, env, clear=True), patch.object(drag, 'desktop_route', return_value=route), patch.object(drag.subprocess, 'Popen') as spawn:
+            result = drag.submit(['/server/file'], action='open')
+            spawn.assert_not_called()
+        self.assertEqual(result['scope'], scope)
+        job = self.read(receiver)
+        self.assertEqual(job['action'], 'open')
+        self.assertEqual(job['id'], result['id'])
+        self.assertFalse(select.select([legacy.stdout], [], [], .05)[0])
+        receiver.stdin.write(drag.packet({'id': job['id'], 'state': 'done'}))
+        receiver.stdin.flush()
+        watched = self.cli('watch', '--session', scope, job['id'])
+        self.assertEqual(watched.returncode, 0, watched.stderr)
+        self.assertEqual(json.loads(watched.stdout.splitlines()[-1])['state'], 'done')
+        wrong_scope = self.cli('watch', job['id'])
+        self.assertNotEqual(wrong_scope.returncode, 0)
+
+    def test_disconnected_scoped_receiver_does_not_fall_back_to_other_online_client(self):
+        first_scope = self.session + '@' + 'a' * 32
+        second_scope = self.session + '@' + 'b' * 32
+        first, second, legacy = self.start(first_scope), self.start(second_scope), self.start()
+        for broker in (first, second, legacy):
+            self.read(broker)
+        self.stop(first)
+        with patch.dict(os.environ, dict(self.env, HERDR_SESSION=self.session), clear=True), patch.object(drag, 'desktop_route', return_value={'local_to_server': False, 'receiver_id': 'a' * 32}), patch.object(drag.subprocess, 'Popen') as spawn:
+            with self.assertRaisesRegex(RuntimeError, 'No active local receiver'):
+                drag.submit(['/server/file'])
+            spawn.assert_not_called()
+        self.assertFalse(select.select([second.stdout, legacy.stdout], [], [], .05)[0])
+        self.request({'paths': ['/still-working']}, session=second_scope)
+        self.assertEqual(self.read(second)['paths'], ['/still-working'])
+
+    def test_simultaneous_scoped_requests_never_cross_clients(self):
+        scopes = [self.session + '@' + x * 32 for x in ('a', 'b')]
+        brokers = [self.start(scope) for scope in scopes]
+        greetings = [self.read(broker) for broker in brokers]
+        addresses = [self.locations(scope)[1] for scope in scopes]
+        def send(pair):
+            index, address = pair
+            with socket.socket(socket.AF_UNIX) as client:
+                client.settimeout(3)
+                client.connect(str(address))
+                client.sendall(drag.packet({'paths': ['/client-' + str(index)]}))
+                with client.makefile('rb') as stream:
+                    return json.loads(stream.readline())
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(send, enumerate(addresses)))
+        for index, broker in enumerate(brokers):
+            job = self.read(broker)
+            self.assertEqual(job['paths'], ['/client-' + str(index)])
+            self.assertEqual(job['receiver'], greetings[index]['ready'])
+            self.assertEqual(job['id'], responses[index]['id'])
+
     def test_killed_watcher_cancels_only_its_transfer(self):
         broker = self.start()
         greeting = self.read(broker)
@@ -300,9 +373,28 @@ class BrokerTests(unittest.TestCase):
 
 
 class LocalTests(unittest.TestCase):
+    def test_local_client_bypasses_offline_remote_marker_without_removing_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {'XDG_STATE_HOME': tmp, 'HERDR_SESSION': 'local-routing-test',
+                   'HERDR_DRAG_LOCAL': '1'}
+            with patch.dict(os.environ, env, clear=True):
+                state, _ = drag.locations(env['HERDR_SESSION'])
+                (state / 'remote').write_text(env['HERDR_SESSION'])
+                with patch.object(drag.subprocess, 'Popen') as launch:
+                    launch.return_value.wait.side_effect = subprocess.TimeoutExpired('ripdrag', .25)
+                    drag.submit(['/tmp/example.txt'])
+                    launch.assert_called_once()
+                self.assertTrue((state / 'remote').exists())
+                os.environ['HERDR_DRAG_LOCAL'] = '0'
+                with patch.object(drag.subprocess, 'Popen') as launch:
+                    with self.assertRaisesRegex(RuntimeError, 'No active local receiver'):
+                        drag.submit(['/tmp/example.txt'])
+                    launch.assert_not_called()
+
     def test_local_fallback_keeps_ripdrag_options_and_literal_arguments(self):
         paths = ['space quote\'" 雪', '-option', '$`command`']
         with patch.dict(os.environ, {}, clear=True), patch.object(drag.subprocess, 'Popen') as launch:
+            launch.return_value.wait.side_effect = subprocess.TimeoutExpired('ripdrag', .25)
             result = drag.submit(paths)
         self.assertEqual(launch.call_args.args[0],
                          ['ripdrag', '-x', '-a', '-n', '-b', *map(os.path.abspath, paths)])

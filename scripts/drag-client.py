@@ -26,18 +26,23 @@ def main():
     parser.add_argument('host')
     parser.add_argument('session')
     args = parser.parse_args()
+    receiver_id = os.environ.get('HERDR_DRAG_RECEIVER_ID')
+    scope = args.session + '@' + receiver_id if receiver_id else args.session
     cache = Path(os.environ.get('HERDR_DRAG_CACHE', str(Path.home() / '.cache/herdr-yazi-drag')))
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     log = (cache / 'receiver.log').open('a', buffering=1)
     ripdrag = shutil.which('ripdrag')
     if not ripdrag:
         raise RuntimeError('Install local ripdrag before using remote drag')
-    command = 'exec python3 "$HOME/pets/herdr-yazi-links/drag.py" serve ' + shlex.join([args.session, socket.gethostname()])
+    remote_root = os.environ.get('HERDR_YAZI_REMOTE_ROOT')
+    helper = shlex.quote(remote_root + '/drag.py') if remote_root else '"$HOME/pets/herdr-yazi-links/drag.py"'
+    command = 'exec python3 ' + helper + ' serve ' + shlex.join([scope, socket.gethostname()])
     ssh = subprocess.Popen(['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=5',
                             '-o', 'ServerAliveCountMax=3', '--', args.host, command],
                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=log)
     write_lock = threading.Lock()
     stop = threading.Event()
+    parent_pid = os.getppid()
     def feedback(value):
         with write_lock:
             ssh.stdin.write(packet(value))
@@ -50,6 +55,10 @@ def main():
             pass
     def heartbeat():
         while not stop.wait(2):
+            if os.getppid() != parent_pid:
+                stop.set()
+                ssh.terminate()
+                return
             windows[:] = [window for window in windows if window.poll() is None]
             try:
                 feedback({'heartbeat': True})
@@ -86,16 +95,24 @@ def main():
                 files = download(args.host, job['paths'], cache, batch_progress=progress, cancel=is_cancelled)
                 with dispatch_lock:
                     check_cancel(is_cancelled)
-                    window = subprocess.Popen([ripdrag, '-x', '-a', '-n', '-b', *map(str, files)],
-                                              stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                              start_new_session=True)
+                    if job.get('action', 'drag') == 'open':
+                        opener = '/usr/bin/open' if sys.platform == 'darwin' else '/usr/bin/xdg-open'
+                        commands = [[opener, str(path)] for path in files]
+                    else:
+                        commands = [[ripdrag, '-x', '-a', '-n', '-b', *map(str, files)]]
+                    launched = []
+                    for command in commands:
+                        window = subprocess.Popen(command, stdin=subprocess.DEVNULL,
+                                                  stdout=log, stderr=log, start_new_session=True)
+                        launched.append(window)
+                        windows.append(window)
                     cancellations.pop(job['id'], None)  # Once launched, copies must remain available.
-                windows.append(window)
                 time.sleep(0.2)
-                if window.poll() not in (None, 0):
-                    raise RuntimeError('ripdrag exited with code ' + str(window.returncode))
+                for window in launched:
+                    if window.poll() not in (None, 0):
+                        raise RuntimeError(('File opener' if job.get('action') == 'open' else 'ripdrag') + ' exited with code ' + str(window.returncode))
                 counters['percent'] = 100
-                report('Opened ripdrag: ' + str(files[0].parent.parent), job=job['id'], state='done', **counters)
+                report(('Opened file: ' if job.get('action') == 'open' else 'Opened ripdrag: ') + str(files[0].parent.parent), job=job['id'], state='done', **counters)
             except TransferCancelled as error:
                 report(str(error), job=job['id'], state='cancelled')
             except Exception as error:
@@ -130,7 +147,10 @@ def main():
                     if event:
                         event.set()
                 continue
-            validate({'paths': job['paths']})
+            request = {'paths': job['paths']}
+            if job.get('action', 'drag') != 'drag':
+                request['action'] = job['action']
+            validate(request)
             with dispatch_lock:
                 cancellations[job['id']] = threading.Event()
             try:

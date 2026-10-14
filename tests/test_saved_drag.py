@@ -55,4 +55,34 @@ class SavedReceivers(unittest.TestCase):
             healthy.terminate.assert_not_called()
             manager.close()
 
-if __name__=='__main__': unittest.main()
+
+    def test_receiver_state_is_separate_per_client_and_legacy_service(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {'XDG_STATE_HOME': tmp}, clear=True):
+            legacy = saved.state_dir()
+            with patch.dict(os.environ, {'HERDR_DRAG_RECEIVER_ID': 'a' * 32}):
+                first = saved.state_dir()
+            with patch.dict(os.environ, {'HERDR_DRAG_RECEIVER_ID': 'b' * 32}):
+                second = saved.state_dir()
+            self.assertEqual(len({legacy, first, second}), 3)
+            self.assertEqual(first.parent, second.parent)
+            self.assertEqual(first.name, 'a' * 32)
+
+    def test_slow_startup_is_retried_and_close_only_stops_owned_children(self):
+        child, replacement = self.child(), self.child()
+        manager = saved.Receivers('/python', {'HERDR_DRAG_RECEIVER_ID': 'c' * 32}, io.StringIO())
+        key = {('mac', 'work')}
+        with patch.object(saved.subprocess, 'Popen', side_effect=[child, replacement]) as spawn, patch.object(saved.select, 'select', return_value=([], [], [])):
+            manager.reconcile(key, 0)
+            manager.reconcile(key, 31)
+            child.terminate.assert_called_once()
+            manager.reconcile(key, 32)
+            self.assertEqual(spawn.call_count, 1)
+            manager.reconcile(key, 34)
+            self.assertEqual(spawn.call_count, 2)
+            self.assertEqual(spawn.call_args.kwargs['env']['HERDR_DRAG_RECEIVER_ID'], 'c' * 32)
+            manager.close()
+            replacement.terminate.assert_called_once()
+            self.assertFalse(manager.children)
+
+if __name__ == '__main__':
+    unittest.main()

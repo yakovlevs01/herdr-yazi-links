@@ -1,7 +1,7 @@
 # Update this file and the patch together, after checking the candidate build.
 repository = "https://github.com/herdrdev/herdr.git"
-revision = "7b116c05bfda646af39d2524c54e70c751f57ee8"
-version = "0.9.3"
+revision = "7e26bad94044eba205033111a0ce8033ede7e24f"
+version = "0.9.4"
 rust = "1.98.1"
 zig = "0.16.0"
 patch = "herdr-path-click.patch"

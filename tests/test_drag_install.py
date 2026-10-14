@@ -113,6 +113,7 @@ local env, state, children = {}, {}, {}
 local cancelled, killed, reaped = false, false, false
 os.getenv = function(key) return env[key] end
 local frames = {}
+local receiver_scope = nil
 local id = string.rep("a", 32)
 local function draw()
   if children[1] then rendered[#rendered + 1] = children[1]({_area={w=100}}) end
@@ -130,7 +131,7 @@ ya = {
     return task
   end,
   json_decode = function(text)
-    if text == "submit" then return {id=id} end
+    if text == "submit" then return {id=id,scope=receiver_scope} end
     return frames[text]
   end,
 }
@@ -183,6 +184,11 @@ assert(commands[2][2] == "watch" and commands[2][3] == "--heartbeat" and command
 assert(table.concat(rendered):find("2/5 43%%"))
 assert(table.concat(rendered):find("Drag: ready"))
 assert(children[1]({_area={w=100}})=="", "success must clear")
+receiver_scope="test@" .. string.rep("b",32)
+commands={}; plugin.entry(plugin)
+assert(commands[2][4]=="--session" and commands[2][5]==receiver_scope and commands[2][6]==id)
+receiver_scope=nil
+
 local paths = { "/tmp/a b'\"$;\n.txt", "/tmp/путь/file.txt", "/tmp/other/file.txt" }
 cx.active.selected = {}
 for _, path in ipairs(paths) do table.insert(cx.active.selected, {url=path}) end

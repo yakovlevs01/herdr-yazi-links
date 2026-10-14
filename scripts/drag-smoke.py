@@ -44,6 +44,8 @@ def until(function, description, timeout=30):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--remote', required=True)
+    parser.add_argument('--isolated-config', action='store_true')
+    parser.add_argument('--saved-machine', action='store_true')
     parser.add_argument('--remote-root', help='Defaults to ~/pets/herdr-yazi-links on host')
     parser.add_argument('--launcher', type=Path, default=ROOT / 'herdr-yazi')
     parser.add_argument('--output', type=Path, help='Retained logs and downloaded test copies')
@@ -83,6 +85,9 @@ print(json.dumps({'root':str(root), 'tmp':str(tmp), 'files':[(str(p), c) for p,c
 '''
     info = json.loads(remote(fixture_code, args.remote_root or '').stdout)
     remote_tmp, remote_root = info['tmp'], info['root']
+    remote_yazi_config = remote_tmp + '/yazi-config'
+    if args.isolated_config:
+        remote('import pathlib,sys,json; root=pathlib.Path(sys.argv[1]); c=pathlib.Path(sys.argv[2]); (c/"plugins/herdr-drag.yazi").mkdir(parents=True); (c/"plugins/herdr-drag.yazi/main.lua").write_text((root/"yazi/herdr-drag.yazi/main.lua").read_text().replace(chr(34)+"@HERDR_DRAG_HELPER@"+chr(34),json.dumps(str(root/"drag.py")))); (c/"keymap.toml").write_text(sys.argv[3]); (c/"init.lua").write_text(sys.argv[4])', remote_root, remote_yazi_config, '[[mgr.prepend_keymap]]\non="<C-g>"\nrun="plugin herdr-drag"\n', 'require("herdr-drag"):setup()\n')
     (tmp / 'fixtures.json').write_text(json.dumps(info, indent=2))
     bindir = tmp / 'bin'
     bindir.mkdir()
@@ -120,10 +125,23 @@ sys.exit(process.wait())
         wrapper.chmod(0o755)
     argv_log = tmp / 'ripdrag.jsonl'
     argv_log.touch()
-    env = {k: v for k, v in os.environ.items() if not k.startswith('HERDR_')}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(('HERDR_', 'SSH_'))}
     env.update(PATH=str(bindir) + os.pathsep + os.environ['PATH'],
                HERDR_DRAG_CACHE=str(tmp / 'cache'), HERDR_DRAG_SMOKE_ARGV=str(argv_log),
                TERM='xterm-256color')
+    if args.remote_root:
+        env['HERDR_YAZI_REMOTE_ROOT'] = remote_root
+    local_test_session = 'saved-' + uuid.uuid4().hex[:12]
+    if args.saved_machine:
+        env['XDG_CONFIG_HOME'] = str(tmp/'config')
+        env['XDG_STATE_HOME'] = str(tmp/'state')
+        config = tmp/'config/herdr'; config.mkdir(parents=True)
+        (config/'config.toml').write_text('onboarding=false\n')
+        catalog = tmp/'state/herdr/client'; catalog.mkdir(parents=True)
+        profile = uuid.uuid4().hex
+        (catalog/'endpoints.json').write_text(json.dumps({'version':1,'selected_profile':profile,'ssh':[{'id':profile,'label':'Test remote','target':args.remote,'session':session,'enabled':True}]}))
+        (catalog/'endpoint-selection.json').write_text(json.dumps({'version':1,'selected_profile':profile}))
+        remote('import subprocess,sys; subprocess.run([sys.argv[1]+"/scripts/prepare.sh",sys.argv[2]],check=True,stdout=subprocess.DEVNULL)',remote_root,session)
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 150, 0, 0))
     transcript = (tmp / 'terminal.log').open('wb')
@@ -140,8 +158,8 @@ sys.exit(process.wait())
     client = tunnel = None
     copied = []
     try:
-        client = subprocess.Popen([str(args.launcher.resolve()), '--remote', args.remote,
-                                   '--remote-keybindings', 'server', '--session', session],
+        launch_args = ['--session',local_test_session] if args.saved_machine else ['--remote', args.remote, '--remote-keybindings', 'server', '--session', session]
+        client = subprocess.Popen([str(args.launcher.resolve()), *launch_args],
                                   env=env, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
         os.close(slave)
         slave = None
@@ -188,11 +206,11 @@ else: raise RuntimeError('Launcher did not create unique remote server socket')
             else:
                 api('plugin.pane.open', {'plugin_id': 'local.yazi-links', 'entrypoint': 'yazi',
                     'placement': 'split', 'target_pane_id': source, 'direction': 'right',
-                    'cwd': str(Path(path).parent), 'focus': True, 'env': {'YAZI_LINK_PATH': path}})
+                    'cwd': str(Path(path).parent), 'focus': True, 'env': dict({'YAZI_LINK_PATH': path}, **({'YAZI_CONFIG_HOME':remote_yazi_config} if args.isolated_config else {}))})
             pane = until(lambda: next((p['pane_id'] for p in panes() if p['pane_id'] not in before), None), 'Yazi pane')
             if args.shell_yazi:
                 until(lambda: any(p['pane_id'] == pane and p.get('foreground_cwd') for p in panes()), 'shell startup')
-                api('pane.send_input', {'pane_id': pane, 'text': shlex.join(['exec', 'yazi', path]), 'keys': ['enter']})
+                api('pane.send_input', {'pane_id': pane, 'text': shlex.join(['exec', 'env', *(['YAZI_CONFIG_HOME='+remote_yazi_config] if args.isolated_config else []), 'yazi', path]), 'keys': ['enter']})
             def yazi_ready():
                 screen = visible(pane)
                 return '00-hover' in screen and 'NOR' in screen
@@ -316,6 +334,15 @@ assert not list(pathlib.Path(info['tmp']).rglob('NOT_EXECUTED'))
             sys.stderr.write((tmp / 'cache/receiver.log').read_text()[-4000:] + '\n')
         raise
     finally:
+        # A saved-machine client reconnects automatically. Stop it before its
+        # disposable remote server, otherwise it can recreate that server.
+        if client and client.poll() is None:
+            client.terminate()
+            try:
+                client.wait(timeout=45)
+            except subprocess.TimeoutExpired:
+                client.kill()
+                client.wait(timeout=5)
         cleanup = '''import pathlib, shutil, subprocess, sys
 root, session, tmp=sys.argv[1:]
 subprocess.run([str(pathlib.Path(root)/'.build/bin/herdr'), '--session', session, 'server', 'stop'], timeout=15)
@@ -330,6 +357,9 @@ shutil.rmtree(tmp)
                 except subprocess.TimeoutExpired:
                     client.terminate()
                     client.wait(timeout=8)
+            if args.saved_machine:
+                local_binary = args.launcher.resolve().parent/'.build/bin/herdr'
+                subprocess.run([str(local_binary), '--session',local_test_session,'server','stop'], env=env, stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL, timeout=15)
             if tunnel:
                 tunnel.terminate()
                 tunnel.wait(timeout=5)

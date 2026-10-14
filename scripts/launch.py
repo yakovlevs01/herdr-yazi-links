@@ -10,6 +10,7 @@ import time
 import signal
 import fcntl
 import json
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -32,7 +33,7 @@ def managed_receiver(host, session):
 
 def remote_client(binary, args, env, host, session, python):
     """Own receiver lifetime without changing Herdr's arguments or server lifetime."""
-    if managed_receiver(host, session):
+    if not env.get("HERDR_DRAG_RECEIVER_ID") and managed_receiver(host, session):
         return subprocess.call([str(binary), *args], env=env)
     def interrupted(signum, frame):
         raise SystemExit(128 + signum)
@@ -65,6 +66,27 @@ def remote_client(binary, args, env, host, session, python):
         receiver.stdout.close()
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+
+
+def local_client(command, env):
+    receiver = subprocess.Popen([sys.executable, str(ROOT / 'scripts/saved-drag.py'),
+                                 '--herdr', str(ROOT / '.build/bin/herdr'), '--parent-pid', str(os.getpid())],
+                                env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+    client = None
+    def interrupted(signum, frame):
+        raise SystemExit(128 + signum)
+    previous = {sig: signal.signal(sig, interrupted) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    try:
+        client = subprocess.Popen(command, env=env)
+        return client.wait()
+    finally:
+        if client is not None and client.poll() is None:
+            client.terminate(); client.wait()
+        receiver.terminate()
+        try: receiver.wait(timeout=35)
+        except subprocess.TimeoutExpired: receiver.kill(); receiver.wait()
+        for sig, handler in previous.items(): signal.signal(sig, handler)
 
 
 def preparation(args, default_session):
@@ -120,7 +142,7 @@ def launch_environment(args, source):
     # Commands inside a pane must retain its socket, session and --current IDs.
     # Only an application attach starts outside the calling pane's context.
     remote_attach = bool(args and args[0].startswith('-') and preparation(args, 'yazi-links'))
-    if remote_attach or not has_subcommand(args):
+    if remote_attach or not has_subcommand(args) or args[:2] == ['session', 'attach']:
         if env.get('HERDR_SOCKET_PATH') or env.get('HERDR_ENV') == '1':
             env.pop('HERDR_SESSION', None)
         for key in ('HERDR_SOCKET_PATH', 'HERDR_CLIENT_SOCKET_PATH', 'HERDR_ENV',
@@ -141,10 +163,16 @@ def main():
     if not os.access(binary, os.X_OK):
         raise SystemExit('Build Herdr first: ' + str(ROOT / 'build.sh'))
     env = launch_environment(args, os.environ)
+    application = (not has_subcommand(args) or args[:2] == ['session', 'attach']) and not any(a in ('--help', '-h', '--version', '-V', '--skill', '--default-config') for a in args)
+    if application:
+        env['HERDR_DRAG_RECEIVER_ID'] = uuid.uuid4().hex
+        env['HERDR_DESKTOP_WRAPPED'] = '1'
     setup = None if args and not args[0].startswith('-') else preparation(args, env['HERDR_SESSION'])
     if setup:
         host, session = setup
-        command = 'exec "$HOME/pets/herdr-yazi-links/scripts/prepare.sh" ' + shlex.quote(session)
+        remote_root = env.get('HERDR_YAZI_REMOTE_ROOT')
+        prepare = shlex.quote(remote_root + '/scripts/prepare.sh') if remote_root else '"$HOME/pets/herdr-yazi-links/scripts/prepare.sh"'
+        command = 'exec ' + prepare + ' ' + shlex.quote(session)
         result = subprocess.run(['ssh', '--', host, command], env=env)
         if result.returncode:
             raise SystemExit(result.returncode)
@@ -153,7 +181,11 @@ def main():
             raise SystemExit(remote_client(binary, args, env, host, session, python))
     if sys.platform.startswith('linux') and (ROOT / '.build/server-management.json').exists():
         entry = ROOT / 'scripts/herdr-entry.py'
+        if application:
+            raise SystemExit(local_client([sys.executable, str(entry), *args], env))
         os.execve(sys.executable, [sys.executable, str(entry), *args], env)
+    if application:
+        raise SystemExit(local_client([str(binary), *args], env))
     os.execve(binary, [str(binary), *args], env)
 
 

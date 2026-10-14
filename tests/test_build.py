@@ -37,6 +37,7 @@ class BuildSafetyTests(unittest.TestCase):
         config = {'repository': 'invalid-unused-fixture', 'revision': revision, 'rust': 'test', 'zig': '0.16.0', 'patch': 'change.patch'}
         (self.root / 'patches/upstream.toml').write_text('\n'.join(f'{k} = {json.dumps(v)}' for k, v in config.items()))
         (self.root / 'scripts/smoke.py').write_text('import os,sys\nsys.exit(1 if os.environ.get("FAIL_STAGE") == "smoke" else 0)\n')
+        shutil.copy(self.root / 'scripts/smoke.py', self.root / 'scripts/desktop-smoke.py')
         self.executable = self.root / '.build/bin/herdr'
         self.executable.write_text('old binary')
         self.env = dict(os.environ)

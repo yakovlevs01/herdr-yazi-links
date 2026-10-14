@@ -37,6 +37,8 @@ def main():
     parser.add_argument('--handoff-to', type=Path, help='Hand off the isolated local server to this binary before click checks')
     parser.add_argument('--expect-paths', action='store_true', help='Require the plain-text path patch')
     parser.add_argument('--expect-home-paths', action='store_true', help='Require ~/ path expansion in a local test')
+    parser.add_argument('--expect-client-context', choices=('local', 'ssh'),
+                        help='Test Enter opener environment against a separately started stale server')
     parser.add_argument('--plugin', type=Path, default=ROOT)
     parser.add_argument('--remote', help='SSH host with the plugin and patched Herdr installed')
     parser.add_argument('--remote-root', help='Absolute plugin checkout path on the SSH host')
@@ -46,17 +48,20 @@ def main():
         parser.error('--handoff-to currently requires a local test')
     if args.expect_home_paths and args.remote:
         parser.error('--expect-home-paths currently requires a local test')
+    if args.expect_client_context and args.remote:
+        parser.error('--expect-client-context uses an isolated local server')
     if bool(args.remote) != bool(args.remote_root):
         parser.error('--remote and --remote-root must be supplied together')
-    if not sys.platform.startswith('linux'):
-        parser.error('The automated PTY smoke test currently supports Linux only.')
+    if not (sys.platform.startswith('linux') or sys.platform == 'darwin'):
+        parser.error('The automated PTY smoke test supports Linux and macOS.')
     binary = shutil.which(args.herdr)
     if not binary:
         parser.error('Herdr executable not found: ' + args.herdr)
     binary = str(Path(binary).resolve())
     if not shutil.which('yazi'):
         parser.error('yazi must be installed in PATH')
-    with tempfile.TemporaryDirectory(prefix='yazi-smoke-') as temporary:
+    # macOS's default per-user TMPDIR exceeds the Unix socket path limit here.
+    with tempfile.TemporaryDirectory(prefix='yazi-smoke-', dir='/tmp' if sys.platform == 'darwin' else None) as temporary:
         tmp = Path(temporary)
         session = 'smoke-' + uuid.uuid4().hex[:10]
         env = {k: v for k, v in os.environ.items() if not k.startswith('HERDR_')}
@@ -73,6 +78,21 @@ def main():
             env['HOME'] = str(tmp)
         target = fixture / 'smoke-target.txt'
         target.write_text('Yazi file link smoke test\n')
+        desktop_keys = ('DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR',
+                        'DBUS_SESSION_BUS_ADDRESS', 'XDG_CURRENT_DESKTOP', 'XDG_SESSION_TYPE')
+        opener_output = tmp / 'opener-env.json'
+        if args.expect_client_context:
+            # Real Yazi Enter invokes this harmless opener instead of a browser.
+            probe = tmp / 'opener.py'
+            probe.write_text('import json, os, pathlib, sys\n'
+                             + 'pathlib.Path(' + repr(str(opener_output)) + ').write_text(json.dumps({'
+                             + '"env": {key: os.environ.get(key) for key in ' + repr(desktop_keys) + '},'
+                             + '"file": sys.argv[1]}))\n')
+            yazi_config = tmp / 'config/yazi'
+            yazi_config.mkdir()
+            opener = shlex.join([sys.executable, str(probe)]) + ' %s'
+            (yazi_config / 'yazi.toml').write_text('[opener]\nprobe = [{ run = '
+                + json.dumps(opener) + ', orphan = true }]\n[open]\nrules = [{ url = "*", use = "probe" }]\n')
         renderer = tmp / 'render.py'
         renderer.write_text('''import os
 import sys
@@ -130,6 +150,22 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
         else:
             subprocess.run(cli + ['plugin', 'link', str(args.plugin.resolve())], env=env, check=True,
                            stdout=subprocess.DEVNULL, timeout=15)
+            if args.expect_client_context:
+                server_env = dict(env)
+                server_env.update({key: 'stale-server-value' for key in desktop_keys})
+                server_env['SSH_CONNECTION'] = 'old-server-ssh'
+                with (tmp / 'server.log').open('wb') as log:
+                    subprocess.Popen(cli + ['server'], env=server_env, cwd=fixture,
+                                     stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                                     start_new_session=True)
+                sockpath = until(lambda: next((tmp / 'config').glob('herdr*/sessions/' + session + '/herdr.sock'), None), 'stale test server')
+                for key in list(env):
+                    if key.startswith('SSH_') or key in desktop_keys:
+                        env.pop(key)
+                env.update(DISPLAY=':client-test', WAYLAND_DISPLAY='wayland-client-test',
+                           XDG_SESSION_TYPE='wayland')
+                if args.expect_client_context == 'ssh':
+                    env['SSH_CONNECTION'] = 'current-ssh-client'
         master, slave = pty.openpty()
         slave_name = os.ttyname(slave)
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 200, 0, 0))
@@ -168,6 +204,8 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
             command = shlex.join(['python3', remote_renderer, str(target)]) if args.remote else shlex.join([sys.executable, str(renderer), str(target)])
             if args.remote:
                 command = 'sh -c ' + shlex.quote('cd ' + shlex.quote(remote_tmp) + ' && exec ' + command)
+            else:
+                command = 'sh -c ' + shlex.quote('cd ' + shlex.quote(str(fixture)) + ' && exec ' + command)
             api('pane.send_input', {'pane_id': source, 'text': 'exec ' + command, 'keys': ['enter']})
             until(lambda: 'OSC_LINK' in text(source), 'fixture output')
             if args.handoff_to:
@@ -183,6 +221,7 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
                 client.wait(timeout=10)
                 reader.join(timeout=2)
                 slave = os.open(slave_name, os.O_RDWR | os.O_NOCTTY)
+                fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 200, 0, 0))
                 client = subprocess.Popen([str(args.handoff_to.resolve()), '--session', session, *args.client_arg],
                                           env=env, cwd=fixture, stdin=slave, stdout=slave, stderr=slave,
                                           start_new_session=True)
@@ -215,6 +254,16 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
                     opened = until(lambda: [p for p in panes() if p['pane_id'] != source], mode + ' Yazi pane')[0]
                     until(lambda: target.name in (text(opened['pane_id']).strip().splitlines() or [''])[-1], 'selected target in Yazi status line')
                     until(lambda: any(log.get('exit_code') == 0 for log in api('plugin.log.list', {'plugin_id': 'local.yazi-links'})['logs'][before_logs:]), 'successful plugin action')
+                    if args.expect_client_context:
+                        opener_output.unlink(missing_ok=True)
+                        api('pane.send_keys', {'pane_id': opened['pane_id'], 'keys': ['enter']})
+                        until(opener_output.exists, 'Enter invokes configured opener')
+                        actual = json.loads(opener_output.read_text())
+                        expected = {key: env.get(key) if args.expect_client_context == 'local' else None
+                                    for key in desktop_keys}
+                        if actual['env'] != expected or Path(actual['file']).name != target.name:
+                            raise RuntimeError('Opener received wrong environment/file: ' + repr(actual))
+                        print('PASS Enter uses ' + args.expect_client_context + ' client context, no stale server desktop', flush=True)
                     api('pane.send_keys', {'pane_id': opened['pane_id'], 'keys': ['q']})
                     until(lambda: len(panes()) == 1, 'Yazi exit')
                 else:

@@ -1,3 +1,62 @@
+# Expanded desktop regressions, 2026-10-14
+
+This completes the test follow-up to the client routing rollout below.
+
+- **132 Python tests passed.** Real Unix sockets exercise desktop API requests and failures; actual broker processes cover two client scopes, simultaneous requests, disconnect without fallback and scoped watchers. Both opener entry points are executed as subprocesses. Launcher tests cover fresh receiver identities, cleanup, and explicit session attach. Receiver tests cover Linux/macOS open actions and failure of any file in a batch. Lua tests verify scoped watcher arguments. A real delayed-stderr child reproduces and guards against an already opened drag window dying after its helper exits.
+- **4050 Rust tests passed across 19 test binaries; 14 skipped by upstream.** Run with nextest, four workers, and temporary Git signing overrides for fixture repositories. This replaces the earlier incomplete single-process cargo test results. Nextest isolates global signal handlers. The stale-path SSH test fixture now explicitly locates its replacement binary instead of accidentally discovering the developer's stable `/usr/bin/herdr`.
+- Rust regression cases cover pane/workspace/action isolation, exact request expiry, overlap and retry, disconnect/reconnect, unknown clients, key release/repeat/modifiers, registration tied to the connection and boot, inactive saved endpoints, shared active viewers, disconnected clipboard owners and direct terminal attachment.
+- Maintenance, hot-path architecture, integration-asset and documentation contract recipes passed. Strict `just check` remains unavailable as one green aggregate: Rust 1.98 Clippy reports three lint categories in unchanged upstream code (`chunks_exact_to_as_chunks`, `byte_char_slices`, `some_filter`), and the Windows SDK is not installed. Clippy passed with only those three command-line exceptions; no blanket warning suppression or source allow attributes were added. Windows cross-validation was not performed.
+- The expanded PTY test passed with a release binary: A/B/A drag, A/B Enter, distinct clipboard PNGs, shared-viewer text refusal, copy after disconnect, a new client after reconnect, plain SSH rejecting inherited desktop/receiver access, and live handoff preserving process IDs while discarding old desktop requests. Artifacts: `/tmp/herdr-desktop-smoke-n93fuizw`.
+- Tests found and fixed five additional behaviors: inactive saved endpoints counted as clipboard viewers, successful reporting despite one failed remote opener, explicit session attachment retaining an inherited pane socket, local ripdrag retaining a stderr pipe whose reader had closed, and malformed API contexts allowing legacy routing. Unknown actions are rejected before consuming routing context or downloading. Only an explicit unknown-method response permits old-server fallback.
+- Deployed the regression fixes on all three machines. SHA256 Linux: `9acf734e67215426b5dfefb898dcd72efe0d1b396c305e3603990eaf7a36938d`; Mac: `bd2b2e5ba01f6470cfd3abff1964aa28f4b87a32df3b8ee59805ddcb1eefc1cd`. Live handoff again preserved all 19 PC, 8 IW and 13 Mac pane IDs, shell PIDs and foreground process group IDs. Fresh native clients loaded the receiver changes. The saved-machine IW smoke test passed again with real Yazi input and SFTP, including literal filenames and preserved originals; artifacts: `/tmp/herdr-drag-smoke-mdpup9ur`.
+
+## Repeat the checks
+
+```sh
+python3 -m unittest discover -s tests -v
+python3 scripts/desktop-smoke.py --herdr .build/bin/herdr --handoff-to .build/bin/herdr
+```
+
+For the patched source, use `cargo +1.98.1 nextest run --locked -j 4 --no-fail-fast` with `CARGO_TARGET_DIR` and `ZIG` set to the build directories. If your Git configuration signs tags, isolate test fixture Git operations with `GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=commit.gpgsign GIT_CONFIG_VALUE_0=false GIT_CONFIG_KEY_1=tag.gpgsign GIT_CONFIG_VALUE_1=false`; this does not change your Git configuration or the signing of the real commit.
+
+| Boundary | Regression evidence |
+|---|---|
+| PC / IW / Mac, direct and saved connections | Six-direction SSH/SFTP results below; reusable `scripts/drag-smoke.py --remote HOST --isolated-config --shell-yazi`, plus `--saved-machine` |
+| Persistent server with stale SSH/display state | Two-client PTY test and native environment replacement tests |
+| Receiver identity / reconnection / concurrent requests | Real scoped brokers, launcher lifetime tests, Rust connection ownership |
+| Text and image clipboard | Rust clipboard suite, active/inactive/shared viewer cases, actual client PTY input |
+| Missing receiver, expired or conflicting request, malformed API | Fail-closed Python socket tests and Rust routing state tests |
+| Local / remote Enter, multiple files, errors | Native opener dispatch tests, both wrapper entry points, PTY Enter |
+| Handoff and old desktop identity | Isolated live handoff with preserved pane/PIDs and fresh client registration |
+| Cancellation and unusual filenames | Existing transfer, Lua, broker and remote smoke suites |
+
+# Client desktop routing, 2026-10-14
+
+This section supersedes the older rollout notes below.
+
+- Installed the new 0.9.4 build on PC, Ubuntu IW and macOS ARM64. SHA256 Linux: `4ac9088454814cfbe9493312b873c84979a17089ff443f9338596f327b3a3542`; Mac: `3a3ab7cb6c471cf1cc55888430f2d694d5a328a25950a3dd96cec47e948dc03e`.
+- 100 Python tests passed. 122 selected Rust tests passed and one upstream test was ignored, covering routing, clipboard, direct terminal copy, link handling, protocol schema and client command compatibility. The full Rust suite did not complete: both parallel and serial runs terminated on SIGPIPE; the final serial run stopped at `server::headless::tests::client_shell_attach_seeds_workspace`. This is not a full-suite pass.
+- Two real PTY clients shared one Yazi on a server with stale SSH/desktop variables. Ctrl+G followed A/B/A, Enter followed A/B, consumed gestures could not replay, and image paste delivered distinct valid PNGs from each client. OSC 52 shared-viewer refusal and copying after the second viewer disconnected passed. Desktop/clipboard programs were recorders, leaving the real clipboard untouched. Final artifacts: `/tmp/herdr-desktop-smoke-l066ea8x`.
+- Native client file transfers passed in all six directions: PC to IW and back, PC to Mac and back, IW to Mac and back. These use real client input, Yazi, SSH and SFTP, with recorded ripdrag arguments. Saved-machine mode also passed on PC and Mac. Fixtures cover hovered file, multiselection, Unicode, quotes, newlines, duplicate basenames and unchanged originals. PC receiving from IW and Mac additionally passed progress and cancellation/retry checks.
+- Installed builds pass `install.sh --check` on all three machines. Post-install transfers PC receiving from IW and Mac receiving from PC passed. Real ripdrag started on PC and Mac; the PC compositor reported its window mapped and visible. Actual mouse drop into another application remains untested. Test windows were closed after verification.
+- Isolated live handoffs passed on Linux and Mac, including Mac 0.9.3 to the new 0.9.4. Production handoffs preserved 19 PC, 8 IW and 13 Mac pane IDs, shell PIDs and foreground process group IDs. Snapshots and logs: `.build/desktop-{before,after}.json`, `.build/desktop-live-handoff.log` on each machine.
+- Fresh native UI clients were opened on all three computers. All six per-client saved-machine receivers reported ready. Closed the two older Linux UI clients and disabled the PC legacy `herdr-yazi-saved-drag.service`; servers and pane processes remain running. Existing unmanaged servers were not migrated to systemd during this update: desktop operations no longer depend on their inherited environment.
+- Rollback binaries and checkout backups: `.build/desktop-routing-before/` on PC; `.build/before-desktop-routing/` on IW and Mac. Build receipts match the installed binary and patch. No commit, push or upstream PR was made.
+
+Known limits and upgrade instructions are in [client desktop routing](docs/client-environment.ru.md). Plain SSH has no native desktop receiver. The GUI opener wrappers apply to Yazi launched by the link plugin; arbitrary existing shell processes retain their environment. OSC 52 from a pane with multiple active viewers is intentionally refused; use client selection for that case. Older clients and servers retain legacy routing.
+
+# Herdr 0.9.4 rollout, 2026-10-14
+
+- Pin: `7e26bad94044eba205033111a0ce8033ede7e24f`, Rust 1.98.1, Zig 0.16.0.
+- Preserve upstream `plugin_link_failed` responses while porting client-context and plain-path patches. Pre-existing local changes were retained.
+- Linux build: 93 Python tests and 189 selected Rust tests passed; one Rust test ignored by upstream.
+- Local PTY tests: OSC 8, relative, absolute and home paths open real Yazi; missing paths do not. Local and SSH client-context checks passed.
+- Live handoff: PC 0.9.3 to 0.9.4 preserved all 17 pane IDs, shell PIDs and foreground process groups. Ubuntu IW 0.9.2 to 0.9.4 preserved all 8. Both had isolated handoff tests before deployment.
+- Both Linux installations pass `install.sh --check`. Saved profile IW is reachable. The PC saved-machine drag receiver service was enabled; IW receiver reports ready.
+- IW remote PTY Ctrl-click tests passed. Ctrl+G tests passed for hovered files, multiselection, unusual filenames, repeated basenames, progress, cancellation, retry after cancellation and persistent directory rejection. Remote originals remained unchanged. Actual GUI drop into another application was not tested; ripdrag arguments were recorded.
+- Logs and rollback binaries: `.build/*0.9.4*` and `.build/before-0.9.4/` on each updated host.
+- Mac rollout pending network availability.
+
 # Plugin-only validation
 
 - Platform: Linux.

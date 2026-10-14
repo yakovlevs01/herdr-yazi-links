@@ -4,7 +4,9 @@ The patch lets you Ctrl-click an existing path in ordinary terminal text. This c
 
 [Русский](patched-herdr.ru.md) · [Plugin without a patch](plugin.md)
 
-The source build pins Herdr 0.9.3. Run `./build.sh` for this version: the installer’s published downloads still contain the previous build. After a successful build, `install.sh` preserves the new executable using its build receipt.
+The source build pins Herdr 0.9.4. Run `./build.sh` for this version: the installer’s published downloads still contain the previous build. After a successful build, `install.sh` preserves the new executable using its build receipt.
+
+Desktop routing now follows the originating client connection for drag, GUI opening and clipboard images. Update both client and server, and reload the Yazi plugin. See [routing details in Russian](client-environment.ru.md).
 
 ## Build and launch
 

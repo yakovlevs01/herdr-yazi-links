@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Expand desktop routing regressions across API sockets, receiver generations, simultaneous requests, client reconnects, ordinary SSH and live handoff. The full nextest suite passes with isolated Git fixture signing.
+- Exclude inactive saved-machine endpoints from shared-pane clipboard ambiguity. Preserve desktop receiver ownership when explicitly attaching another session.
+- Reject unknown GUI actions and malformed desktop API contexts, report failure of any opener in a remote batch, and keep ripdrag stderr writable after the launching helper exits.
+
+- Route Ctrl+G and Yazi's GUI Enter opener through the originating client connection. Each `herdr-yazi` launch owns its receivers, including saved SSH machines; old session markers cannot redirect new requests.
+- Read pasted images on native clients for both local and remote servers. Route OSC 52 text to the pane's input owner and refuse ambiguous shared-pane clipboard writes.
+- Recognize `remote-client-bridge --idle-timeout-v1` in the managed entry point. Keep desktop request context out of persistent server state.
+- Add two-client PTY regression checks and scoped receiver isolation tests. Validate transfers across PC, Ubuntu IW and Mac in all six directions.
+
+- Rebase the patched build onto Herdr 0.9.4, preserving upstream `plugin_link_failed` errors and the local/SSH client context for Yazi.
+
 - Support existing Git worktrees in the build script.
 
 - Add opt-in `--patched-entry` for saved SSH machine discovery on Linux and macOS, preserving the previous executable and blocking upstream updates that remove the patch.

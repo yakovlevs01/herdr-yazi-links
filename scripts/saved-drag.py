@@ -15,7 +15,7 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 def state_dir():
-    return Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / 'herdr-yazi-drag/saved-machines'
+    return Path(os.environ.get('XDG_STATE_HOME', str(Path.home()/'.local/state'))) / ('herdr-yazi-drag/clients/' + os.environ['HERDR_DRAG_RECEIVER_ID'] if os.environ.get('HERDR_DRAG_RECEIVER_ID') else 'herdr-yazi-drag/saved-machines')
 
 def targets(rows):
     if not isinstance(rows, list):
@@ -89,6 +89,7 @@ class Receivers:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--parent-pid', type=int)
     parser.add_argument('--herdr', default=shutil.which('herdr') or str(ROOT/'.build/bin/herdr'))
     args = parser.parse_args()
     state = state_dir()
@@ -113,6 +114,8 @@ def main():
         desired, refresh = set(), 0
         try:
             while not stopping:
+                if args.parent_pid and os.getppid() != args.parent_pid:
+                    break
                 now = time.monotonic()
                 if now >= refresh:
                     try:

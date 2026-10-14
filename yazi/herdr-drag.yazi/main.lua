@@ -124,13 +124,14 @@ return {
 		end
 		if not result.id then return end -- Local Herdr launches ripdrag directly.
 		local id = result.id
+		local scope_args = result.scope and { "--session", result.scope } or {}
 		context.id = id
 		begin(id, { state = "queued", file_count = #paths })
 		local task = ya.task("custom", { pool = "none", scope = scope, track = true, progress = true })
 			:name("Download to local ripdrag"):spawn()
 		context.task = task
 		if not task:acquire() then return end
-		local child, spawn_error = Command("python3"):arg({ helper, "watch", "--heartbeat", id })
+		local child, spawn_error = Command("python3"):arg({ helper, "watch", "--heartbeat" }):arg(scope_args):arg({ id })
 			:stdout(Command.PIPED):stderr(Command.PIPED):spawn()
 		context.child = child
 		if not child then
@@ -146,7 +147,7 @@ return {
 				child:wait()
 				-- Observe the receiver's acknowledgement without holding the lease.
 				cancelled = true
-				child = Command("python3"):arg({ helper, "watch", "--observe", id })
+				child = Command("python3"):arg({ helper, "watch", "--observe" }):arg(scope_args):arg({ id })
 					:stdout(Command.PIPED):stderr(Command.PIPED):spawn()
 				context.child = child
 				if not child then return update(id, { state = "error", message = "Cannot observe cancellation" }) end

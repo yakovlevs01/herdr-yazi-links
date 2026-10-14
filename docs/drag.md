@@ -1,5 +1,8 @@
 # Remote files to local ripdrag
 
+The current patched 0.9.4 build gives each `herdr-yazi` client its own receivers. Multiple computers can share a session without sharing a transfer destination. See [routing and upgrade details](client-environment.ru.md); the legacy compatibility workflow remains described below.
+
+
 [Русский](drag.ru.md)
 
 Connect from the computer where you want to drop files:

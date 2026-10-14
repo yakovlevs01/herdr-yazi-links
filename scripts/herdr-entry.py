@@ -30,7 +30,7 @@ def invocation(args, env):
         i += 1
     if command[:2] == ['session', 'attach'] and len(command) == 3:
         session = command[2]
-    starts = not command or command == ['server'] or command == ['remote-client-bridge'] or command[:2] == ['session', 'attach']
+    starts = not command or command == ['server'] or command[:1] == ['remote-client-bridge'] or command[:2] == ['session', 'attach']
     return session, command, starts
 
 

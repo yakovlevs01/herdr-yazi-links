@@ -1,8 +1,466 @@
+diff --git a/docs/next/api/herdr-api.schema.json b/docs/next/api/herdr-api.schema.json
+index e2553f7..1c707e7 100644
+--- a/docs/next/api/herdr-api.schema.json
++++ b/docs/next/api/herdr-api.schema.json
+@@ -1759,6 +1759,32 @@
+           ],
+           "type": "object"
+         },
++        "DesktopClientContext": {
++          "description": "Per-connection desktop routing; never persisted with a pane or session.",
++          "properties": {
++            "desktop_env": {
++              "additionalProperties": {
++                "type": "string"
++              },
++              "default": {},
++              "type": "object"
++            },
++            "local_to_server": {
++              "description": "True only when the clicking client and target server share this desktop host.",
++              "type": "boolean"
++            },
++            "receiver_id": {
++              "type": [
++                "string",
++                "null"
++              ]
++            }
++          },
++          "required": [
++            "local_to_server"
++          ],
++          "type": "object"
++        },
+         "EmptyParams": {
+           "type": "object"
+         },
+@@ -2354,6 +2380,25 @@
+           ],
+           "type": "object"
+         },
++        "LinkClientContext": {
++          "properties": {
++            "desktop_env": {
++              "additionalProperties": {
++                "type": "string"
++              },
++              "default": {},
++              "type": "object"
++            },
++            "local_to_server": {
++              "description": "True only when the clicking client and target server share this desktop host.",
++              "type": "boolean"
++            }
++          },
++          "required": [
++            "local_to_server"
++          ],
++          "type": "object"
++        },
+         "NotificationShowParams": {
+           "properties": {
+             "body": {
+@@ -2561,6 +2606,21 @@
+           },
+           "type": "object"
+         },
++        "PaneDesktopTakeParams": {
++          "properties": {
++            "action": {
++              "default": "drag",
++              "type": "string"
++            },
++            "pane_id": {
++              "type": "string"
++            }
++          },
++          "required": [
++            "pane_id"
++          ],
++          "type": "object"
++        },
+         "PaneDirection": {
+           "enum": [
+             "left",
+@@ -2665,6 +2725,51 @@
+           ],
+           "type": "object"
+         },
++        "PaneLinkActivateWithClientParams": {
++          "properties": {
++            "client_context": {
++              "$ref": "#/schemas/request/$defs/LinkClientContext"
++            },
++            "col": {
++              "format": "uint16",
++              "maximum": 65535,
++              "minimum": 0,
++              "type": "integer"
++            },
++            "content_revision": {
++              "format": "uint64",
++              "minimum": 0,
++              "type": [
++                "integer",
++                "null"
++              ]
++            },
++            "offset_from_bottom": {
++              "format": "uint64",
++              "minimum": 0,
++              "type": [
++                "integer",
++                "null"
++              ]
++            },
++            "pane_id": {
++              "type": "string"
++            },
++            "viewport_row": {
++              "format": "uint16",
++              "maximum": 65535,
++              "minimum": 0,
++              "type": "integer"
++            }
++          },
++          "required": [
++            "pane_id",
++            "viewport_row",
++            "col",
++            "client_context"
++          ],
++          "type": "object"
++        },
+         "PaneListParams": {
+           "properties": {
+             "workspace_id": {
+@@ -3452,6 +3557,16 @@
+                 "null"
+               ]
+             },
++            "client_context": {
++              "anyOf": [
++                {
++                  "$ref": "#/schemas/request/$defs/LinkClientContext"
++                },
++                {
++                  "type": "null"
++                }
++              ]
++            },
+             "correlation_id": {
+               "type": [
+                 "string",
+@@ -4905,6 +5020,22 @@
+           ],
+           "type": "object"
+         },
++        {
++          "properties": {
++            "method": {
++              "const": "client.desktop.register",
++              "type": "string"
++            },
++            "params": {
++              "$ref": "#/schemas/request/$defs/DesktopClientContext"
++            }
++          },
++          "required": [
++            "method",
++            "params"
++          ],
++          "type": "object"
++        },
+         {
+           "properties": {
+             "method": {
+@@ -5817,6 +5948,22 @@
+           ],
+           "type": "object"
+         },
++        {
++          "properties": {
++            "method": {
++              "const": "pane.desktop.take",
++              "type": "string"
++            },
++            "params": {
++              "$ref": "#/schemas/request/$defs/PaneDesktopTakeParams"
++            }
++          },
++          "required": [
++            "method",
++            "params"
++          ],
++          "type": "object"
++        },
+         {
+           "properties": {
+             "method": {
+@@ -5833,6 +5980,22 @@
+           ],
+           "type": "object"
+         },
++        {
++          "properties": {
++            "method": {
++              "const": "pane.link.activate_with_client",
++              "type": "string"
++            },
++            "params": {
++              "$ref": "#/schemas/request/$defs/PaneLinkActivateWithClientParams"
++            }
++          },
++          "required": [
++            "method",
++            "params"
++          ],
++          "type": "object"
++        },
+         {
+           "properties": {
+             "method": {
+@@ -6792,6 +6955,32 @@
+           ],
+           "type": "string"
+         },
++        "DesktopClientContext": {
++          "description": "Per-connection desktop routing; never persisted with a pane or session.",
++          "properties": {
++            "desktop_env": {
++              "additionalProperties": {
++                "type": "string"
++              },
++              "default": {},
++              "type": "object"
++            },
++            "local_to_server": {
++              "description": "True only when the clicking client and target server share this desktop host.",
++              "type": "boolean"
++            },
++            "receiver_id": {
++              "type": [
++                "string",
++                "null"
++              ]
++            }
++          },
++          "required": [
++            "local_to_server"
++          ],
++          "type": "object"
++        },
+         "EventData": {
+           "oneOf": [
+             {
+@@ -7774,6 +7963,25 @@
+             }
+           ]
+         },
++        "LinkClientContext": {
++          "properties": {
++            "desktop_env": {
++              "additionalProperties": {
++                "type": "string"
++              },
++              "default": {},
++              "type": "object"
++            },
++            "local_to_server": {
++              "description": "True only when the clicking client and target server share this desktop host.",
++              "type": "boolean"
++            }
++          },
++          "required": [
++            "local_to_server"
++          ],
++          "type": "object"
++        },
+         "NotificationShowReason": {
+           "enum": [
+             "shown",
+@@ -8733,6 +8941,16 @@
+                 "null"
+               ]
+             },
++            "client_context": {
++              "anyOf": [
++                {
++                  "$ref": "#/schemas/success_response/$defs/LinkClientContext"
++                },
++                {
++                  "type": "null"
++                }
++              ]
++            },
+             "correlation_id": {
+               "type": [
+                 "string",
+@@ -10404,6 +10622,22 @@
+               ],
+               "type": "object"
+             },
++            {
++              "properties": {
++                "context": {
++                  "$ref": "#/schemas/success_response/$defs/DesktopClientContext"
++                },
++                "type": {
++                  "const": "desktop_route",
++                  "type": "string"
++                }
++              },
++              "required": [
++                "type",
++                "context"
++              ],
++              "type": "object"
++            },
+             {
+               "properties": {
+                 "type": {
+diff --git a/src/api/schema.rs b/src/api/schema.rs
+index 439ed33..664b9a9 100644
+--- a/src/api/schema.rs
++++ b/src/api/schema.rs
+@@ -73,6 +73,8 @@ pub enum Method {
+     ClientWindowTitleClear(EmptyParams),
+     #[serde(rename = "client_shell.surface.set")]
+     ClientShellSurfaceSet(ClientShellSurfaceSetParams),
++    #[serde(rename = "client.desktop.register")]
++    ClientDesktopRegister(DesktopClientContext),
+     #[serde(rename = "session.snapshot")]
+     SessionSnapshot(EmptyParams),
+     #[serde(rename = "workspace.create")]
+@@ -187,8 +189,12 @@ pub enum Method {
+     PaneFocus(PaneTarget),
+     #[serde(rename = "pane.input.set")]
+     PaneInputSet(PaneInputSetParams),
++    #[serde(rename = "pane.desktop.take")]
++    PaneDesktopTake(PaneDesktopTakeParams),
+     #[serde(rename = "pane.link.activate")]
+     PaneLinkActivate(PaneLinkActivateParams),
++    #[serde(rename = "pane.link.activate_with_client")]
++    PaneLinkActivateWithClient(PaneLinkActivateWithClientParams),
+     #[serde(rename = "pane.link.resolve")]
+     PaneLinkResolve(PaneLinkActivateParams),
+     #[serde(rename = "pane.rename")]
+diff --git a/src/api/schema/panes.rs b/src/api/schema/panes.rs
+index 9dbe022..df002a1 100644
+--- a/src/api/schema/panes.rs
++++ b/src/api/schema/panes.rs
+@@ -40,6 +40,21 @@ pub struct PaneInputSetParams {
+     pub right_click: PaneRightClickTarget,
+ }
+ 
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
++pub struct LinkClientContext {
++    /// True only when the clicking client and target server share this desktop host.
++    pub local_to_server: bool,
++    #[serde(default)]
++    pub desktop_env: std::collections::BTreeMap<String, String>,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
++pub struct PaneLinkActivateWithClientParams {
++    #[serde(flatten)]
++    pub link: PaneLinkActivateParams,
++    pub client_context: LinkClientContext,
++}
++
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+ pub struct PaneLinkActivateParams {
+     pub pane_id: String,
+@@ -694,3 +709,22 @@ pub struct PaneLinkRegion {
+     pub start_col: u16,
+     pub end_col: u16,
+ }
++
++/// Per-connection desktop routing; never persisted with a pane or session.
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
++pub struct DesktopClientContext {
++    #[serde(flatten)]
++    pub link: LinkClientContext,
++    pub receiver_id: Option<String>,
++}
++
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
++pub struct PaneDesktopTakeParams {
++    pub pane_id: String,
++    #[serde(default = "desktop_drag_action")]
++    pub action: String,
++}
++
++fn desktop_drag_action() -> String {
++    "drag".into()
++}
+diff --git a/src/api/schema/plugins.rs b/src/api/schema/plugins.rs
+index 52df3ca..2df5967 100644
+--- a/src/api/schema/plugins.rs
++++ b/src/api/schema/plugins.rs
+@@ -362,6 +362,8 @@ pub enum PluginActionContext {
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+ pub struct PluginInvocationContext {
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub client_context: Option<super::panes::LinkClientContext>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub workspace_id: Option<String>,
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+diff --git a/src/api/schema/response.rs b/src/api/schema/response.rs
+index e92e495..7c5dfa8 100644
+--- a/src/api/schema/response.rs
++++ b/src/api/schema/response.rs
+@@ -277,6 +277,9 @@ pub enum ResponseResult {
+         active: bool,
+         projection_revision: u64,
+     },
++    DesktopRoute {
++        context: super::panes::DesktopClientContext,
++    },
+     Ok {},
+ }
+ 
+diff --git a/src/api/server.rs b/src/api/server.rs
+index 0a4cfa6..1d6cceb 100644
+--- a/src/api/server.rs
++++ b/src/api/server.rs
+@@ -571,7 +571,10 @@ fn handle_request(
+         });
+     }
+ 
+-    if matches!(&request.method, Method::ClientShellSurfaceSet(_)) {
++    if matches!(
++        &request.method,
++        Method::ClientShellSurfaceSet(_) | Method::ClientDesktopRegister(_)
++    ) {
+         return error_response_json(
+             request.id,
+             "connection_local_only",
+@@ -616,6 +619,7 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
+         Method::CommandInvoke(_) => "command.invoke",
+         Method::ClientWindowTitleSet(_) => "client.window_title.set",
+         Method::ClientWindowTitleClear(_) => "client.window_title.clear",
++        Method::ClientDesktopRegister(_) => "client.desktop.register",
+         Method::ClientShellSurfaceSet(_) => "client_shell.surface.set",
+         Method::SessionSnapshot(_) => "session.snapshot",
+         Method::WorkspaceCreate(_) => "workspace.create",
+@@ -674,7 +678,9 @@ pub(crate) fn api_method_name(method: &Method) -> &'static str {
+         Method::PaneGet(_) => "pane.get",
+         Method::PaneFocus(_) => "pane.focus",
+         Method::PaneInputSet(_) => "pane.input.set",
++        Method::PaneDesktopTake(_) => "pane.desktop.take",
+         Method::PaneLinkActivate(_) => "pane.link.activate",
++        Method::PaneLinkActivateWithClient(_) => "pane.link.activate_with_client",
+         Method::PaneLinkResolve(_) => "pane.link.resolve",
+         Method::PaneRename(_) => "pane.rename",
+         Method::PaneSendText(_) => "pane.send_text",
 diff --git a/src/app/actions.rs b/src/app/actions.rs
-index e1ae2ffc..579caa1c 100644
+index ed131dc..ae154ef 100644
 --- a/src/app/actions.rs
 +++ b/src/app/actions.rs
-@@ -1023,15 +1023,76 @@ impl AppState {
+@@ -1041,15 +1041,76 @@ impl AppState {
      }
  }
  
@@ -80,7 +538,7 @@ index e1ae2ffc..579caa1c 100644
  pub(crate) fn safe_web_url(url: &str) -> Option<&str> {
      (url.starts_with("http://") || url.starts_with("https://")).then_some(url)
  }
-@@ -2533,6 +2594,126 @@ mod tests {
+@@ -2567,6 +2628,126 @@ mod tests {
          assert_eq!(selected_url("open file:///tmp/report", "file"), None);
      }
  
@@ -207,11 +665,80 @@ index e1ae2ffc..579caa1c 100644
      #[test]
      fn apply_workspace_git_statuses_updates_matching_workspace() {
          let mut state = app_with_workspaces(&["one", "two"]);
+diff --git a/src/app/api.rs b/src/app/api.rs
+index dd87c50..38065ea 100644
+--- a/src/app/api.rs
++++ b/src/app/api.rs
+@@ -1177,10 +1177,24 @@ impl App {
+             Method::PaneCurrent(params) => return self.handle_pane_current(request.id, params),
+             Method::PaneGet(target) => return self.handle_pane_get(request.id, target),
+             Method::PaneFocus(target) => return self.handle_pane_focus(request.id, target),
++            Method::PaneDesktopTake(_) | Method::ClientDesktopRegister(_) => {
++                return responses::encode_error(
++                    request.id,
++                    "desktop_unavailable",
++                    "Desktop routing requires the live server",
++                )
++            }
+             Method::PaneInputSet(params) => return self.handle_pane_input_set(request.id, params),
+             Method::PaneLinkResolve(params) => {
+                 return self.handle_pane_link_resolve(request.id, params);
+             }
++            Method::PaneLinkActivateWithClient(params) => {
++                return self.handle_pane_link_activate_with_client(
++                    request.id,
++                    params.link,
++                    Some(params.client_context),
++                );
++            }
+             Method::PaneLinkActivate(params) => {
+                 return self.handle_pane_link_activate(request.id, params);
+             }
+diff --git a/src/app/api/plugins/context.rs b/src/app/api/plugins/context.rs
+index 8aee1c3..fdd8e11 100644
+--- a/src/app/api/plugins/context.rs
++++ b/src/app/api/plugins/context.rs
+@@ -9,6 +9,7 @@ impl App {
+     ) -> PluginInvocationContext {
+         let mut context = self.current_plugin_context(correlation_id);
+         if let Some(provided) = provided {
++            context.client_context = provided.client_context.or(context.client_context);
+             context.workspace_id = provided.workspace_id.or(context.workspace_id);
+             context.workspace_label = provided.workspace_label.or(context.workspace_label);
+             context.workspace_cwd = provided.workspace_cwd.or(context.workspace_cwd);
+@@ -358,6 +359,7 @@ impl App {
+             .and_then(|pane| pane.cwd.clone())
+             .or_else(|| Some(self.default_cwd_for_workspace(ws_idx).display().to_string()));
+         PluginInvocationContext {
++            client_context: None,
+             workspace_id: Some(workspace.workspace_id),
+             workspace_label: Some(workspace.label),
+             workspace_cwd,
+@@ -391,6 +393,7 @@ impl App {
+ 
+ fn empty_plugin_context(correlation_id: &str) -> PluginInvocationContext {
+     PluginInvocationContext {
++        client_context: None,
+         workspace_id: None,
+         workspace_label: None,
+         workspace_cwd: None,
 diff --git a/src/app/api/plugins/mod.rs b/src/app/api/plugins/mod.rs
-index c9b37bfe..0958fb62 100644
+index daafc83..0bd80ad 100644
 --- a/src/app/api/plugins/mod.rs
 +++ b/src/app/api/plugins/mod.rs
-@@ -333,9 +333,11 @@ impl App {
+@@ -330,24 +330,42 @@ impl App {
+         &mut self,
+         id: String,
+         params: PaneLinkActivateParams,
++    ) -> String {
++        self.handle_pane_link_activate_with_client(id, params, None)
++    }
++
++    pub(super) fn handle_pane_link_activate_with_client(
++        &mut self,
++        id: String,
++        params: PaneLinkActivateParams,
++        client_context: Option<crate::api::schema::LinkClientContext>,
      ) -> String {
          let (pane_id, url) =
              match self.read_checked_pane_link(&id, &params, "activation", |runtime, col, row| {
@@ -226,3 +753,1344 @@ index c9b37bfe..0958fb62 100644
              }) {
                  Ok(value) => value,
                  Err(error) => return error,
+             };
+         let handled = match url.as_deref() {
+-            Some(url) => match self.invoke_plugin_link_handler_for_url(url, pane_id) {
+-                Ok(handled) => handled,
+-                Err(err) => {
+-                    tracing::warn!(err = %err, url = %url, "failed to invoke plugin link handler");
+-                    return encode_error(id, "plugin_link_failed", err);
++            Some(url) => {
++                let result = if client_context.is_some() {
++                    self.invoke_plugin_link_handler_with_client(url, pane_id, client_context)
++                } else {
++                    self.invoke_plugin_link_handler_for_url(url, pane_id)
++                };
++                match result {
++                    Ok(handled) => handled,
++                    Err(err) => {
++                        tracing::warn!(err = %err, url = %url, "failed to invoke plugin link handler");
++                        return encode_error(id, "plugin_link_failed", err);
++                    }
+                 }
+-            },
++            }
+             None => false,
+         };
+         encode_success(id, ResponseResult::PaneLinkActivated { url, handled })
+@@ -357,6 +375,15 @@ impl App {
+         &mut self,
+         url: &str,
+         pane_id: crate::layout::PaneId,
++    ) -> Result<bool, String> {
++        self.invoke_plugin_link_handler_with_client(url, pane_id, None)
++    }
++
++    fn invoke_plugin_link_handler_with_client(
++        &mut self,
++        url: &str,
++        pane_id: crate::layout::PaneId,
++        client_context: Option<crate::api::schema::LinkClientContext>,
+     ) -> Result<bool, String> {
+         self.refresh_installed_plugins()
+             .map_err(|err| format!("failed to load plugin registry: {err}"))?;
+@@ -393,6 +420,7 @@ impl App {
+         let mut context = self.plugin_context_for_pane(ws_idx, pane_id, "link_click");
+         context.invocation_source = Some("link_click".to_string());
+         context.clicked_url = Some(url.to_string());
++        context.client_context = client_context;
+         context.link_handler_id = Some(handler.id);
+         self.start_plugin_command(
+             &plugin,
+@@ -2517,6 +2545,7 @@ command = ["sh", "-c", "printf %s ${{HERDR_PANE_ID-unset}} > '{}'; sleep 1"]
+                 plugin_id: Some("example.worktree-bootstrap".into()),
+                 action_id: "bootstrap".into(),
+                 context: Some(PluginInvocationContext {
++                    client_context: None,
+                     workspace_id: Some("1".into()),
+                     workspace_label: None,
+                     workspace_cwd: None,
+diff --git a/src/cli/plugin.rs b/src/cli/plugin.rs
+index 3d9b4a5..4eb15e5 100644
+--- a/src/cli/plugin.rs
++++ b/src/cli/plugin.rs
+@@ -645,6 +645,7 @@ fn plugin_action_invoke(args: &[String]) -> std::io::Result<i32> {
+         action_id: action_id.clone(),
+         plugin_id,
+         context: Some(PluginInvocationContext {
++            client_context: None,
+             workspace_id: None,
+             workspace_label: None,
+             workspace_cwd: None,
+diff --git a/src/client/clipboard_images.rs b/src/client/clipboard_images.rs
+index cd2f148..76ee0d0 100644
+--- a/src/client/clipboard_images.rs
++++ b/src/client/clipboard_images.rs
+@@ -55,11 +55,11 @@ pub(super) fn client_remote_image_paste_key(
+ }
+ 
+ pub(super) fn endpoint_accepts_local_images(
+-    remote_client_process: bool,
+-    endpoint_id: &super::endpoint::ClientEndpointId,
++    ssh_terminal: bool,
++    _endpoint_id: &super::endpoint::ClientEndpointId,
+     active_surface_available: bool,
+ ) -> bool {
+-    active_surface_available && (remote_client_process || !endpoint_id.is_local())
++    active_surface_available && !ssh_terminal
+ }
+ 
+ #[cfg(unix)]
+diff --git a/src/client/endpoint/activation/protocol.rs b/src/client/endpoint/activation/protocol.rs
+index 707dd0e..8049339 100644
+--- a/src/client/endpoint/activation/protocol.rs
++++ b/src/client/endpoint/activation/protocol.rs
+@@ -128,6 +128,28 @@ pub(super) fn send_surface_activation(
+     resize: &crate::protocol::ClientMessage,
+     focused: bool,
+ ) -> Result<(), String> {
++    if endpoints
++        .connection(&target.endpoint_id)
++        .is_some_and(|connection| {
++            connection
++                .negotiation
++                .supports_method("client.desktop.register")
++        })
++    {
++        let registration = endpoint_request(
++            &target.boot_id,
++            crate::api::schema::Request {
++                id: format!("{request_id}:desktop"),
++                method: crate::api::schema::Method::ClientDesktopRegister(
++                    crate::client::desktop_context(target.endpoint_id.is_local()),
++                ),
++            },
++        )
++        .map_err(|error| error.to_string())?;
++        if endpoints.send_to(&target.endpoint_id, &registration) != EndpointSendOutcome::Sent {
++            return Err("desktop registration could not be sent".into());
++        }
++    }
+     if endpoints.send_to(&target.endpoint_id, resize) != EndpointSendOutcome::Sent {
+         return Err("endpoint resize could not be sent".into());
+     }
+diff --git a/src/client/endpoint/registry.rs b/src/client/endpoint/registry.rs
+index 437f39f..e95e525 100644
+--- a/src/client/endpoint/registry.rs
++++ b/src/client/endpoint/registry.rs
+@@ -62,6 +62,7 @@ impl EndpointNegotiation {
+ pub(crate) struct EndpointConnection {
+     transport: Box<dyn EndpointTransport>,
+     pub(crate) generation: u64,
++    pub(crate) desktop_registered: bool,
+     pub(crate) surface_active: bool,
+     pub(crate) negotiation: EndpointNegotiation,
+     health: Option<EndpointHealth>,
+@@ -159,6 +160,7 @@ impl EndpointRegistry {
+             EndpointConnection {
+                 transport: Box::new(transport),
+                 generation,
++                desktop_registered: false,
+                 surface_active,
+                 negotiation,
+                 health,
+@@ -251,6 +253,12 @@ impl EndpointRegistry {
+         true
+     }
+ 
++    pub(crate) fn mark_desktop_registered(&mut self, endpoint: &ClientEndpointId) {
++        if let Some(connection) = self.connections.get_mut(endpoint) {
++            connection.desktop_registered = true;
++        }
++    }
++
+     pub(crate) fn set_surface_active(
+         &mut self,
+         endpoint_id: &ClientEndpointId,
+diff --git a/src/client/mod.rs b/src/client/mod.rs
+index f55db19..61b4f47 100644
+--- a/src/client/mod.rs
++++ b/src/client/mod.rs
+@@ -99,7 +99,6 @@ fn refresh_host_keyboard_protocol(
+     }
+ }
+ 
+-#[cfg(windows)]
+ use terminal_setup::is_ssh_session;
+ #[cfg(test)]
+ use terminal_setup::{
+@@ -827,8 +826,9 @@ async fn run_client_loop(
+             ClientLoopEvent::EndpointCatalog(reload) => pending_catalog = Some(reload),
+             #[cfg(unix)]
+             ClientLoopEvent::StdinInput(data) => {
++                register_desktop_before_input(&mut write_stream, state.shell.as_ref());
+                 let image_bridge_active = endpoint_accepts_local_images(
+-                    is_remote_client,
++                    is_ssh_session(),
+                     write_stream.active_id(),
+                     write_stream.active_surface_available(),
+                 );
+@@ -1134,8 +1134,9 @@ async fn run_client_loop(
+             }
+             #[cfg(windows)]
+             ClientLoopEvent::StdinEvents(events) => {
++                register_desktop_before_input(&mut write_stream, state.shell.as_ref());
+                 let image_bridge_active = endpoint_accepts_local_images(
+-                    is_remote_client,
++                    is_ssh_session(),
+                     write_stream.active_id(),
+                     write_stream.active_surface_available(),
+                 );
+@@ -2365,3 +2366,71 @@ async fn run_client_loop(
+ 
+ #[cfg(test)]
+ mod tests;
++
++/// Desktop belongs to this client process, not the persistent server.
++pub(crate) fn desktop_context(local_endpoint: bool) -> crate::api::schema::DesktopClientContext {
++    let local = local_endpoint && !is_remote_client_process() && !is_ssh_session();
++    let desktop_env = if local {
++        [
++            "DISPLAY",
++            "WAYLAND_DISPLAY",
++            "XAUTHORITY",
++            "XDG_RUNTIME_DIR",
++            "DBUS_SESSION_BUS_ADDRESS",
++            "XDG_CURRENT_DESKTOP",
++            "XDG_SESSION_TYPE",
++        ]
++        .into_iter()
++        .filter_map(|key| std::env::var(key).ok().map(|v| (key.to_owned(), v)))
++        .collect()
++    } else {
++        Default::default()
++    };
++    crate::api::schema::DesktopClientContext {
++        link: crate::api::schema::LinkClientContext {
++            local_to_server: local,
++            desktop_env,
++        },
++        receiver_id: if is_ssh_session() {
++            None
++        } else {
++            std::env::var("HERDR_DRAG_RECEIVER_ID").ok()
++        },
++    }
++}
++
++fn register_desktop_before_input(
++    endpoints: &mut endpoint::EndpointRegistry,
++    shell: Option<&shell::ClientShellState>,
++) {
++    let id = endpoints.active_id().clone();
++    let Some(connection) = endpoints.connection(&id) else {
++        return;
++    };
++    if connection.desktop_registered
++        || !connection
++            .negotiation
++            .supports_method("client.desktop.register")
++    {
++        return;
++    }
++    let Some(boot) = shell.and_then(|s| s.endpoint_boot_id(&id)) else {
++        return;
++    };
++    let request = crate::api::schema::Request {
++        id: "client-desktop-input".into(),
++        method: crate::api::schema::Method::ClientDesktopRegister(desktop_context(id.is_local())),
++    };
++    if let Ok(request) = serde_json::to_string(&request) {
++        if endpoints.send_to(
++            &id,
++            &ClientMessage::ClientShellEndpointRequest {
++                boot_id: boot.into(),
++                request,
++            },
++        ) == endpoint::EndpointSendOutcome::Sent
++        {
++            endpoints.mark_desktop_registered(&id);
++        }
++    }
++}
+diff --git a/src/client/shell/mouse.rs b/src/client/shell/mouse.rs
+index 8e873d6..1725282 100644
+--- a/src/client/shell/mouse.rs
++++ b/src/client/shell/mouse.rs
+@@ -975,18 +975,40 @@ impl ClientShellState {
+                     .map(|pane| pane.content_revision);
+                 self.last_pane_click = None;
+                 let pane_id = hit.pane_id.clone();
+-                self.push_endpoint_method_with_kind(
+-                    crate::api::schema::Method::PaneLinkActivate(
+-                        crate::api::schema::PaneLinkActivateParams {
+-                            pane_id: pane_id.clone(),
+-                            viewport_row,
+-                            col,
+-                            content_revision,
+-                            offset_from_bottom: hit
+-                                .scroll
+-                                .map(|metrics| metrics.offset_from_bottom as u64),
++                let params = crate::api::schema::PaneLinkActivateParams {
++                    pane_id: pane_id.clone(),
++                    viewport_row,
++                    col,
++                    content_revision,
++                    offset_from_bottom: hit.scroll.map(|metrics| metrics.offset_from_bottom as u64),
++                };
++                let supports_client_context = self
++                    .endpoints
++                    .iter()
++                    .find(|endpoint| endpoint.endpoint_id == self.active_endpoint_id)
++                    .and_then(|endpoint| endpoint.methods.as_ref())
++                    .is_some_and(|methods| {
++                        methods
++                            .iter()
++                            .any(|method| method == "pane.link.activate_with_client")
++                    });
++                let method = if supports_client_context {
++                    crate::api::schema::Method::PaneLinkActivateWithClient(
++                        crate::api::schema::PaneLinkActivateWithClientParams {
++                            link: params,
++                            client_context: link_client_context(
++                                self.active_endpoint_id.is_local()
++                                    && !crate::client::is_remote_client_process()
++                                    && !crate::client::terminal_setup::is_ssh_session(),
++                                |key| std::env::var(key).ok(),
++                            ),
+                         },
+-                    ),
++                    )
++                } else {
++                    crate::api::schema::Method::PaneLinkActivate(params)
++                };
++                self.push_endpoint_method_with_kind(
++                    method,
+                     PendingEndpointKind::PaneLinkActivate {
+                         pane_id,
+                         inner_rect: hit.inner_rect,
+@@ -2400,3 +2422,61 @@ impl ClientShellState {
+         );
+     }
+ }
++
++// Keep this scoped to the invoking client, never the server's process environment.
++fn link_client_context(
++    local_to_server: bool,
++    env: impl Fn(&str) -> Option<String>,
++) -> crate::api::schema::LinkClientContext {
++    let keys = [
++        "DISPLAY",
++        "WAYLAND_DISPLAY",
++        "XAUTHORITY",
++        "XDG_RUNTIME_DIR",
++        "DBUS_SESSION_BUS_ADDRESS",
++        "XDG_CURRENT_DESKTOP",
++        "XDG_SESSION_TYPE",
++    ];
++    crate::api::schema::LinkClientContext {
++        local_to_server,
++        desktop_env: if local_to_server {
++            keys.into_iter()
++                .filter_map(|key| {
++                    env(key)
++                        .filter(|value| !value.is_empty())
++                        .map(|value| (key.to_string(), value))
++                })
++                .collect()
++        } else {
++            Default::default()
++        },
++    }
++}
++
++#[cfg(test)]
++mod link_client_context_tests {
++    use super::link_client_context;
++
++    #[test]
++    fn local_click_carries_only_desktop_variables() {
++        let context = link_client_context(true, |key| Some(format!("value-of-{key}")));
++        assert!(context.local_to_server);
++        assert_eq!(context.desktop_env.len(), 7);
++        assert_eq!(context.desktop_env["DISPLAY"], "value-of-DISPLAY");
++        assert!(!context.desktop_env.contains_key("PATH"));
++    }
++
++    #[test]
++    fn remote_click_never_reads_or_forwards_local_environment() {
++        let context = link_client_context(false, |_| panic!("must not read local environment"));
++        assert!(!context.local_to_server);
++        assert!(context.desktop_env.is_empty());
++    }
++
++    #[test]
++    fn local_tty_is_explicitly_distinct_from_legacy_missing_context() {
++        let context = link_client_context(true, |_| None);
++        assert!(context.local_to_server);
++        assert!(context.desktop_env.is_empty());
++    }
++}
+diff --git a/src/client/shell/tests/mouse_selection.rs b/src/client/shell/tests/mouse_selection.rs
+index eced234..b8994ef 100644
+--- a/src/client/shell/tests/mouse_selection.rs
++++ b/src/client/shell/tests/mouse_selection.rs
+@@ -1,5 +1,38 @@
+ use super::*;
+ 
++#[test]
++fn ctrl_click_negotiates_client_context_and_keeps_legacy_fallback() {
++    for supported in [false, true] {
++        let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
++        state.set_snapshot(Box::new(snapshot()));
++        state.set_endpoint_methods(Some(if supported {
++            vec!["pane.link.activate_with_client".into()]
++        } else {
++            vec!["pane.link.activate".into()]
++        }));
++        state.set_pane_surface(surface());
++        state.compose(106, 20).unwrap();
++        let pane = state.hits.panes[0].clone();
++        let outcome = state.handle_raw_events(vec![RawInputEvent::Mouse(MouseEvent {
++            kind: MouseEventKind::Down(MouseButton::Left),
++            column: pane.inner_rect.x + 2,
++            row: pane.inner_rect.y + 1,
++            modifiers: KeyModifiers::CONTROL,
++        })]);
++        let [ClientShellAction::Endpoint { request, .. }] = &outcome.actions[..] else {
++            panic!("expected one activation request");
++        };
++        match &request.method {
++            crate::api::schema::Method::PaneLinkActivateWithClient(params) => {
++                assert!(supported);
++                assert_eq!(params.link.pane_id, "pane_1");
++            }
++            crate::api::schema::Method::PaneLinkActivate(_) => assert!(!supported),
++            _ => panic!("unexpected method"),
++        }
++    }
++}
++
+ #[test]
+ fn selection_repaint_cadence_keeps_one_deadline_and_flushes_when_input_stops() {
+     let mut state = ClientShellState::new(ClientShellConfig::from_config(&Config::default()));
+diff --git a/src/client/tests/mod.rs b/src/client/tests/mod.rs
+index 323af2f..6a7601e 100644
+--- a/src/client/tests/mod.rs
++++ b/src/client/tests/mod.rs
+@@ -195,18 +195,18 @@ fn host_cursor_policy_native_and_drawn_override_auto_detection() {
+ }
+ 
+ #[test]
+-fn image_bridge_follows_the_selected_remote_endpoint() {
++fn image_bridge_uses_client_desktop_for_local_and_remote_endpoints() {
+     let remote = crate::client::endpoint::ClientEndpointId::Ssh(
+         crate::client::endpoint::ProfileId::parse("0123456789abcdef0123456789abcdef").unwrap(),
+     );
+ 
+     assert!(endpoint_accepts_local_images(false, &remote, true));
+-    assert!(endpoint_accepts_local_images(
++    assert!(!endpoint_accepts_local_images(
+         true,
+         &crate::client::endpoint::ClientEndpointId::Local,
+         true,
+     ));
+-    assert!(!endpoint_accepts_local_images(
++    assert!(endpoint_accepts_local_images(
+         false,
+         &crate::client::endpoint::ClientEndpointId::Local,
+         true,
+diff --git a/src/events.rs b/src/events.rs
+index 3faf898..d8df158 100644
+--- a/src/events.rs
++++ b/src/events.rs
+@@ -178,7 +178,7 @@ pub enum AppEvent {
+     TerminalBell { pane_id: PaneId, count: u16 },
+     /// A pane child emitted a valid OSC 52 clipboard write. The main loop
+     /// re-emits it through herdr's own clipboard writer.
+-    ClipboardWrite { content: Vec<u8> },
++    ClipboardWrite { pane_id: PaneId, content: Vec<u8> },
+     /// A pane child reported its shell current directory through terminal
+     /// metadata such as OSC 7.
+     TerminalCwdReported {
+diff --git a/src/pane.rs b/src/pane.rs
+index f80baeb..df19eda 100644
+--- a/src/pane.rs
++++ b/src/pane.rs
+@@ -2231,6 +2231,10 @@ fn publish_reported_cwd(
+ }
+ 
+ impl PaneRuntime {
++    pub(crate) fn pane_id(&self) -> PaneId {
++        self.pane_id
++    }
++
+     pub fn shutdown(mut self) {
+         if let Some(handle) = self.detect_handle.take() {
+             handle.abort();
+@@ -2612,7 +2616,9 @@ impl PaneRuntime {
+                     publish_reported_cwd(pane_id, cwd, &reported_cwd, &read_events);
+                 }
+                 for content in result.clipboard_writes {
+-                    if let Err(err) = read_events.try_send(AppEvent::ClipboardWrite { content }) {
++                    if let Err(err) =
++                        read_events.try_send(AppEvent::ClipboardWrite { pane_id, content })
++                    {
+                         warn!(
+                             pane = pane_id.raw(),
+                             err = %err,
+@@ -2817,7 +2823,8 @@ impl PaneRuntime {
+                     publish_reported_cwd(pane_id, cwd, &reported_cwd, &events);
+                 }
+                 for content in result.clipboard_writes {
+-                    if let Err(err) = events.try_send(AppEvent::ClipboardWrite { content }) {
++                    if let Err(err) = events.try_send(AppEvent::ClipboardWrite { pane_id, content })
++                    {
+                         warn!(
+                             pane = pane_id.raw(),
+                             err = %err,
+diff --git a/src/server/client_commands.rs b/src/server/client_commands.rs
+index 87824c8..2fb8530 100644
+--- a/src/server/client_commands.rs
++++ b/src/server/client_commands.rs
+@@ -13,6 +13,7 @@ pub(crate) const MAX_ENDPOINT_REQUEST_ID_BYTES: usize = 128;
+ const ENDPOINT_RESPONSE_CHUNK_BYTES: usize = 512 * 1024;
+ 
+ const CLIENT_SHELL_METHODS: &[&str] = &[
++    "client.desktop.register",
+     "client_shell.surface.set",
+     "command.invoke",
+     "integration.install",
+@@ -27,6 +28,7 @@ const CLIENT_SHELL_METHODS: &[&str] = &[
+     "pane.focus_direction",
+     "pane.input.set",
+     "pane.link.activate",
++    "pane.link.activate_with_client",
+     "pane.link.resolve",
+     "pane.rename",
+     "pane.resize",
+@@ -288,7 +290,12 @@ mod tests {
+         )))
+         .expect("endpoint method shape fixture");
+         let mut actual = endpoint_method_shape_digests();
++        assert!(actual.remove("client.desktop.register").is_some());
+         // Freeze additive methods separately without rewriting the published fixture.
++        assert_eq!(
++            actual.remove("pane.link.activate_with_client").as_deref(),
++            Some("d3c0b066bb7d2c7775a15dde312692593fc2cc46c8422675226e1a86780434f6")
++        );
+         assert_eq!(
+             actual.remove("pane.clear").as_deref(),
+             Some("0301d288ba198ddaa427dd7421c71911cccaf4ea03544531efa8b67ca21b08f6")
+diff --git a/src/server/headless.rs b/src/server/headless.rs
+index cb2c619..b8d5d76 100644
+--- a/src/server/headless.rs
++++ b/src/server/headless.rs
+@@ -76,6 +76,7 @@ use crate::server::terminal_attach::paste_payload_for_runtime;
+ 
+ mod bootstrap;
+ mod client_views;
++mod desktop_routing;
+ mod endpoint_requests;
+ mod lifecycle;
+ mod native_graphics;
+@@ -236,6 +237,7 @@ pub struct HeadlessServer {
+     deferred_alt_screen_reads: Vec<api::ApiRequestMessage>,
+     /// Monotonic activity counter used to pick the most recently active client.
+     next_activity_stamp: u64,
++    desktop_routes: desktop_routing::DesktopRoutes,
+     /// Configured virtual terminal size used when no clients are connected.
+     headless_size: (u16, u16),
+     /// Shared pane runtime size derived from the foreground client, or the
+@@ -383,6 +385,7 @@ impl HeadlessServer {
+             pending_alt_screen_reads: Vec::new(),
+             deferred_alt_screen_reads: Vec::new(),
+             next_activity_stamp: 1,
++            desktop_routes: Default::default(),
+             headless_size,
+             effective_size: headless_size,
+             shutting_down: false,
+@@ -944,6 +947,7 @@ impl HeadlessServer {
+     }
+ 
+     fn remove_client(&mut self, client_id: u64) -> bool {
++        self.desktop_routes.contexts.remove(&client_id);
+         self.disconnect_native_graphics(client_id);
+         let disconnected_focus = self
+             .clients
+@@ -1180,7 +1184,16 @@ impl HeadlessServer {
+                 else {
+                     return false;
+                 };
+-                if let Some(runtime) = self.runtime_for_terminal_id_string(terminal_id) {
++                let terminal_id = terminal_id.clone();
++                if let Some(runtime_pane) = self
++                    .runtime_for_terminal_id_string(&terminal_id)
++                    .map(|runtime| runtime.pane_id())
++                {
++                    self.desktop_routes
++                        .owners
++                        .insert(runtime_pane, (format!("terminal:{terminal_id}"), client_id));
++                }
++                if let Some(runtime) = self.runtime_for_terminal_id_string(&terminal_id) {
+                     let payload = paste_payload_for_runtime(runtime, &path);
+                     if let Err(err) = runtime.try_send_bytes(Bytes::from(payload)) {
+                         warn!(client_id, terminal_id = %terminal_id, err = %err, "terminal attach clipboard image paste failed");
+@@ -2097,7 +2110,16 @@ impl HeadlessServer {
+                 else {
+                     return false;
+                 };
+-                if let Some(runtime) = self.runtime_for_terminal_id_string(terminal_id) {
++                let terminal_id = terminal_id.clone();
++                if let Some(runtime_pane) = self
++                    .runtime_for_terminal_id_string(&terminal_id)
++                    .map(|runtime| runtime.pane_id())
++                {
++                    self.desktop_routes
++                        .owners
++                        .insert(runtime_pane, (format!("terminal:{terminal_id}"), client_id));
++                }
++                if let Some(runtime) = self.runtime_for_terminal_id_string(&terminal_id) {
+                     if let Err(err) = apply_terminal_attach_input(runtime, data) {
+                         warn!(client_id, terminal_id = %terminal_id, err = %err);
+                     }
+@@ -2422,6 +2444,13 @@ impl HeadlessServer {
+                     }
+                     return runtime.scroll_metrics() != scroll_before;
+                 }
++                self.desktop_routes.note_input(
++                    &pane_id,
++                    runtime_pane_id,
++                    client_id,
++                    &events,
++                    Instant::now(),
++                );
+                 let interaction = client_pane_input_has_interaction(&events);
+                 if let Some(client) = self.clients.get_mut(&client_id) {
+                     client
+@@ -2513,6 +2542,14 @@ impl HeadlessServer {
+                     }
+                     return runtime.scroll_metrics() != scroll_before;
+                 }
++
++                self.desktop_routes.note_input(
++                    &format!("popup:{terminal_id}"),
++                    popup_pane_id,
++                    client_id,
++                    &events,
++                    Instant::now(),
++                );
+                 let interaction = client_pane_input_has_interaction(&events);
+                 if let Some(client) = self.clients.get_mut(&client_id) {
+                     client.track_shell_input(
+@@ -2918,6 +2955,28 @@ impl HeadlessServer {
+             return false;
+         }
+ 
++        if let api::schema::Method::PaneDesktopTake(params) = &msg.request.method {
++            let result = self
++                .desktop_routes
++                .take(&params.pane_id, &params.action, Instant::now());
++            let response = match result {
++                Ok(context) => serde_json::to_string(&api::schema::SuccessResponse {
++                    id: msg.request.id,
++                    result: api::schema::ResponseResult::DesktopRoute { context },
++                }),
++                Err(message) => serde_json::to_string(&api::schema::ErrorResponse {
++                    id: msg.request.id,
++                    error: api::schema::ErrorBody {
++                        code: "desktop_unavailable".into(),
++                        message: message.into(),
++                    },
++                }),
++            };
++            let _ = msg
++                .respond_to
++                .send(response.unwrap_or_else(|_| "{}".into()));
++            return false;
++        }
+         let frozen_alt_screen_read = match self.alt_screen_read_conflict(&msg.request) {
+             AltScreenReadConflict::None => None,
+             AltScreenReadConflict::Frozen(snapshot) => Some(snapshot),
+diff --git a/src/server/headless/desktop_routing.rs b/src/server/headless/desktop_routing.rs
+new file mode 100644
+index 0000000..141c212
+--- /dev/null
++++ b/src/server/headless/desktop_routing.rs
+@@ -0,0 +1,307 @@
++//! Desktop operations have a connection owner, never a session-wide destination.
++use crate::api::schema::DesktopClientContext;
++use crate::layout::PaneId;
++use crate::protocol::{ClientKeyCode, ClientKeyKind, ClientPaneInputEvent};
++use std::collections::HashMap;
++use std::time::{Duration, Instant};
++
++const REQUEST_TTL: Duration = Duration::from_secs(5);
++
++#[derive(Default)]
++pub(super) struct DesktopRoutes {
++    pub contexts: HashMap<u64, DesktopClientContext>,
++    pending: HashMap<(String, String), (Option<u64>, Instant)>,
++    pub owners: HashMap<PaneId, (String, u64)>,
++}
++
++impl DesktopRoutes {
++    pub fn note_input(
++        &mut self,
++        pane: &str,
++        runtime: PaneId,
++        client: u64,
++        events: &[ClientPaneInputEvent],
++        now: Instant,
++    ) {
++        for event in events {
++            if matches!(
++                event,
++                ClientPaneInputEvent::Key {
++                    kind: ClientKeyKind::Press | ClientKeyKind::Repeat,
++                    ..
++                } | ClientPaneInputEvent::TextCommit(_)
++                    | ClientPaneInputEvent::Paste(_)
++            ) {
++                self.owners.insert(runtime, (pane.to_owned(), client));
++            }
++            let action = match event {
++                ClientPaneInputEvent::Key {
++                    code: ClientKeyCode::Char('g'),
++                    modifiers,
++                    kind: ClientKeyKind::Press,
++                    ..
++                } if *modifiers == crossterm::event::KeyModifiers::CONTROL.bits() => Some("drag"),
++                ClientPaneInputEvent::Key {
++                    code: ClientKeyCode::Enter,
++                    modifiers: 0,
++                    kind: ClientKeyKind::Press,
++                    ..
++                } => Some("open"),
++                _ => None,
++            };
++            if let Some(action) = action {
++                let key = (pane.to_owned(), action.to_owned());
++                let owner = match self.pending.get(&key) {
++                    Some((previous_owner, previous))
++                        if *previous_owner != Some(client)
++                            && now.duration_since(*previous) < REQUEST_TTL =>
++                    {
++                        None
++                    }
++                    _ => Some(client),
++                };
++                self.pending.insert(key, (owner, now));
++            }
++        }
++    }
++
++    pub fn take(
++        &mut self,
++        pane: &str,
++        action: &str,
++        now: Instant,
++    ) -> Result<DesktopClientContext, &'static str> {
++        let (owner, when) = self
++            .pending
++            .remove(&(pane.to_owned(), action.to_owned()))
++            .ok_or("Use the Herdr client key; no matching desktop request belongs to this pane")?;
++        if now.duration_since(when) >= REQUEST_TTL {
++            return Err("Desktop request expired; press Ctrl+G again");
++        }
++        let owner = owner.ok_or("Overlapping Ctrl+G requests; wait and press Ctrl+G once")?;
++        self.contexts
++            .get(&owner)
++            .cloned()
++            .ok_or("Originating client disconnected or lacks desktop routing; reconnect herdr-yazi")
++    }
++
++    pub fn clipboard_owner(&self, pane: PaneId) -> Option<u64> {
++        self.owners.get(&pane).map(|(_, client)| *client)
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    fn context(local: bool) -> DesktopClientContext {
++        DesktopClientContext {
++            link: crate::api::schema::LinkClientContext {
++                local_to_server: local,
++                desktop_env: Default::default(),
++            },
++            receiver_id: Some(format!("receiver-{local}")),
++        }
++    }
++    fn ctrl_g() -> ClientPaneInputEvent {
++        ClientPaneInputEvent::from_terminal_key(
++            crossterm::event::KeyEvent::new(
++                crossterm::event::KeyCode::Char('g'),
++                crossterm::event::KeyModifiers::CONTROL,
++            )
++            .into(),
++        )
++        .unwrap()
++    }
++    #[test]
++    fn request_keeps_origin_when_another_client_types_and_cannot_be_replayed() {
++        let mut routes = DesktopRoutes::default();
++        routes.contexts.insert(1, context(true));
++        routes.contexts.insert(2, context(false));
++        let pane = PaneId::alloc();
++        let now = Instant::now();
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        routes.note_input(
++            "w1:p1",
++            pane,
++            2,
++            &[ClientPaneInputEvent::Paste("elsewhere".into())],
++            now,
++        );
++        assert_eq!(routes.take("w1:p1", "drag", now).unwrap(), context(true));
++        assert!(routes.take("w1:p1", "drag", now).is_err());
++        routes.note_input("w1:p1", pane, 2, &[ctrl_g()], now);
++        assert_eq!(routes.take("w1:p1", "drag", now).unwrap(), context(false));
++    }
++    #[test]
++    fn disconnected_expired_and_overlapping_requests_never_fall_back() {
++        let mut routes = DesktopRoutes::default();
++        let pane = PaneId::alloc();
++        let now = Instant::now();
++        routes.contexts.insert(1, context(true));
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        routes.contexts.remove(&1);
++        assert!(routes.take("w1:p1", "drag", now).is_err());
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        assert!(routes.take("w1:p1", "drag", now + REQUEST_TTL).is_err());
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        routes.note_input("w1:p1", pane, 2, &[ctrl_g()], now);
++        assert!(routes.take("w1:p1", "drag", now).is_err());
++    }
++    fn enter() -> ClientPaneInputEvent {
++        ClientPaneInputEvent::from_terminal_key(
++            crossterm::event::KeyEvent::new(
++                crossterm::event::KeyCode::Enter,
++                crossterm::event::KeyModifiers::NONE,
++            )
++            .into(),
++        )
++        .unwrap()
++    }
++
++    fn ready() -> (DesktopRoutes, PaneId, Instant) {
++        let mut routes = DesktopRoutes::default();
++        routes.contexts.insert(1, context(true));
++        routes.contexts.insert(2, context(false));
++        (routes, PaneId::alloc(), Instant::now())
++    }
++
++    #[test]
++    fn drag_and_open_requests_do_not_consume_each_other() {
++        let (mut routes, pane, now) = ready();
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        routes.note_input("w1:p1", pane, 2, &[enter()], now);
++        assert_eq!(routes.take("w1:p1", "open", now).unwrap(), context(false));
++        assert_eq!(routes.take("w1:p1", "drag", now).unwrap(), context(true));
++        assert!(routes.take("w1:p1", "open", now).is_err());
++    }
++
++    #[test]
++    fn requests_are_isolated_between_panes_and_workspaces() {
++        let (mut routes, pane, now) = ready();
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        routes.note_input("w2:p1", PaneId::alloc(), 2, &[ctrl_g()], now);
++        assert!(routes.take("w3:p1", "drag", now).is_err());
++        assert_eq!(routes.take("w2:p1", "drag", now).unwrap(), context(false));
++        assert_eq!(routes.take("w1:p1", "drag", now).unwrap(), context(true));
++    }
++
++    #[test]
++    fn wrong_action_does_not_consume_the_valid_request() {
++        let (mut routes, pane, now) = ready();
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        assert!(routes.take("w1:p1", "shell", now).is_err());
++        assert_eq!(routes.take("w1:p1", "drag", now).unwrap(), context(true));
++    }
++
++    #[test]
++    fn request_is_valid_before_ttl_and_expires_exactly_at_boundary() {
++        for delay in [REQUEST_TTL - Duration::from_nanos(1), REQUEST_TTL] {
++            let (mut routes, pane, now) = ready();
++            routes.note_input("w1:p1", pane, 1, &[enter()], now);
++            assert_eq!(
++                routes.take("w1:p1", "open", now + delay).is_ok(),
++                delay < REQUEST_TTL
++            );
++            assert!(routes.take("w1:p1", "open", now + delay).is_err());
++        }
++    }
++
++    #[test]
++    fn overlapping_open_and_drag_fail_once_then_accept_a_fresh_request() {
++        for (action, event) in [("drag", ctrl_g()), ("open", enter())] {
++            let (mut routes, pane, now) = ready();
++            routes.note_input("w1:p1", pane, 1, std::slice::from_ref(&event), now);
++            routes.note_input("w1:p1", pane, 2, std::slice::from_ref(&event), now);
++            assert!(routes.take("w1:p1", action, now).is_err());
++            assert!(routes.take("w1:p1", action, now).is_err());
++            routes.note_input("w1:p1", pane, 2, &[event], now);
++            assert_eq!(routes.take("w1:p1", action, now).unwrap(), context(false));
++        }
++    }
++
++    #[test]
++    fn expired_other_client_request_does_not_block_new_client() {
++        let (mut routes, pane, now) = ready();
++        routes.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        routes.note_input("w1:p1", pane, 2, &[ctrl_g()], now + REQUEST_TTL);
++        assert_eq!(
++            routes.take("w1:p1", "drag", now + REQUEST_TTL).unwrap(),
++            context(false)
++        );
++    }
++
++    #[test]
++    fn reconnect_with_a_new_connection_cannot_claim_old_connection_request() {
++        let (mut routes, pane, now) = ready();
++        routes.note_input("w1:p1", pane, 2, &[ctrl_g()], now);
++        let old = routes.contexts.remove(&2).unwrap();
++        routes.contexts.insert(3, old);
++        assert!(routes.take("w1:p1", "drag", now).is_err());
++        routes.note_input("w1:p1", pane, 3, &[ctrl_g()], now);
++        assert_eq!(routes.take("w1:p1", "drag", now).unwrap(), context(false));
++    }
++
++    #[test]
++    fn unregistered_client_cannot_borrow_another_context() {
++        let (mut routes, pane, now) = ready();
++        routes.note_input("w1:p1", pane, 99, &[ctrl_g()], now);
++        assert!(routes.take("w1:p1", "drag", now).is_err());
++    }
++
++    #[test]
++    fn release_repeat_and_modified_keys_do_not_authorize_desktop_actions() {
++        for kind in [ClientKeyKind::Release, ClientKeyKind::Repeat] {
++            let (mut routes, pane, now) = ready();
++            let mut key = ctrl_g();
++            if let ClientPaneInputEvent::Key { kind: value, .. } = &mut key {
++                *value = kind;
++            }
++            routes.note_input("w1:p1", pane, 1, &[key], now);
++            assert!(routes.take("w1:p1", "drag", now).is_err());
++        }
++        for mut key in [ctrl_g(), enter()] {
++            let (mut routes, pane, now) = ready();
++            if let ClientPaneInputEvent::Key { modifiers, .. } = &mut key {
++                *modifiers |= crossterm::event::KeyModifiers::SHIFT.bits();
++            }
++            routes.note_input("w1:p1", pane, 1, &[key], now);
++            assert!(routes.take("w1:p1", "drag", now).is_err());
++            assert!(routes.take("w1:p1", "open", now).is_err());
++        }
++    }
++
++    #[test]
++    fn clipboard_ownership_is_per_pane_and_paste_does_not_authorize_gui() {
++        let (mut routes, pane, now) = ready();
++        let other = PaneId::alloc();
++        routes.note_input(
++            "w1:p1",
++            pane,
++            1,
++            &[ClientPaneInputEvent::Paste("text".into())],
++            now,
++        );
++        routes.note_input(
++            "w1:p2",
++            other,
++            2,
++            &[ClientPaneInputEvent::TextCommit("text".into())],
++            now,
++        );
++        assert_eq!(routes.clipboard_owner(pane), Some(1));
++        assert_eq!(routes.clipboard_owner(other), Some(2));
++        assert_eq!(routes.clipboard_owner(PaneId::alloc()), None);
++        assert!(routes.take("w1:p1", "drag", now).is_err());
++        assert!(routes.take("w1:p2", "open", now).is_err());
++    }
++
++    #[test]
++    fn new_server_boot_has_no_persisted_desktop_identity() {
++        let (mut old, pane, now) = ready();
++        old.note_input("w1:p1", pane, 1, &[ctrl_g()], now);
++        let mut new = DesktopRoutes::default();
++        assert!(new.contexts.is_empty());
++        assert_eq!(new.clipboard_owner(pane), None);
++        assert!(new.take("w1:p1", "drag", now).is_err());
++    }
++}
+diff --git a/src/server/headless/endpoint_requests.rs b/src/server/headless/endpoint_requests.rs
+index 6d2dd6b..22d4e5e 100644
+--- a/src/server/headless/endpoint_requests.rs
++++ b/src/server/headless/endpoint_requests.rs
+@@ -35,6 +35,20 @@ impl HeadlessServer {
+             self.send_to_client(client_id, message);
+             return false;
+         }
++        if let api::schema::Method::ClientDesktopRegister(context) = &request.method {
++            self.desktop_routes
++                .contexts
++                .insert(client_id, context.clone());
++            self.send_to_client(
++                client_id,
++                crate::server::client_commands::success_message_with_result(
++                    boot_id,
++                    request_id,
++                    api::schema::ResponseResult::Ok {},
++                ),
++            );
++            return false;
++        }
+         let surface_active = client.shell_surface_active;
+         if let api::schema::Method::ClientShellSurfaceSet(params) = &request.method {
+             let Some((changed, projection_revision)) =
+diff --git a/src/server/headless/notifications.rs b/src/server/headless/notifications.rs
+index 1025acb..8ce81b5 100644
+--- a/src/server/headless/notifications.rs
++++ b/src/server/headless/notifications.rs
+@@ -331,11 +331,33 @@ impl HeadlessServer {
+                 }
+                 false
+             }
+-            AppEvent::ClipboardWrite { content } => {
+-                // Clipboard writes are client-local side effects. Forward them only to
+-                // the foreground client instead of broadcasting to every attached client.
++            AppEvent::ClipboardWrite { pane_id, content } => {
++                // OSC 52 has no request id. Route only to the input owner of this
++                // pane, and refuse when the pane is shared by multiple active viewers.
+                 let data = base64::engine::general_purpose::STANDARD.encode(content.as_slice());
+-                self.send_to_foreground_client(ServerMessage::Clipboard { data });
++                let owner = self.desktop_routes.clipboard_owner(*pane_id);
++                let shared = self
++                    .desktop_routes
++                    .owners
++                    .get(pane_id)
++                    .and_then(|(pane, _)| self.app.parse_pane_id(pane))
++                    .is_some_and(|(workspace, runtime)| {
++                        self.clients
++                            .iter()
++                            .filter(|(id, client)| {
++                                client.is_active_shell_client()
++                                    && self.shell_client_views_pane(**id, workspace, runtime)
++                            })
++                            .count()
++                            > 1
++                    });
++                if !shared {
++                    if let Some(client_id) = owner {
++                        self.send_to_client(client_id, ServerMessage::Clipboard { data });
++                    }
++                } else {
++                    warn!(pane = pane_id.raw(), "OSC 52 ignored: pane has multiple active viewers; copy using client selection");
++                }
+                 false
+             }
+             AppEvent::StateChanged { pane_id, agent, .. } => {
+@@ -704,7 +726,7 @@ impl HeadlessServer {
+     ///
+     /// The server has no host terminal or audio subsystem, so we:
+     /// - Forward `ClipboardWrite` as `ServerMessage::Clipboard` to the
+-    ///   foreground client only.
++    ///   unambiguous input owner of the originating pane.
+     /// - Detect when a sound would be played and forward as
+     ///   `ServerMessage::Notify { kind: Sound }` to the foreground client.
+     /// - Detect when a toast is set on AppState and forward as
+diff --git a/src/server/headless/tests/desktop.rs b/src/server/headless/tests/desktop.rs
+new file mode 100644
+index 0000000..bf4dd6e
+--- /dev/null
++++ b/src/server/headless/tests/desktop.rs
+@@ -0,0 +1,137 @@
++use super::*;
++
++fn add_client(
++    server: &mut HeadlessServer,
++    id: u64,
++    active: bool,
++) -> std::sync::mpsc::Receiver<Vec<u8>> {
++    let (writer, rx, _render) = test_client_writer();
++    let mut client = ClientConnection::new_with_mode(
++        ClientConnectionMode::ClientShell,
++        (80, 24),
++        crate::kitty_graphics::HostCellSize::default(),
++        id,
++        RenderEncoding::SemanticFrame,
++        Some(writer),
++    );
++    client.shell_surface_active = active;
++    server.clients.insert(id, client);
++    rx
++}
++
++fn context(receiver: &str) -> api::schema::DesktopClientContext {
++    api::schema::DesktopClientContext {
++        link: api::schema::LinkClientContext {
++            local_to_server: false,
++            desktop_env: Default::default(),
++        },
++        receiver_id: Some(receiver.into()),
++    }
++}
++
++fn register(server: &mut HeadlessServer, client_id: u64, boot_id: String, receiver: &str) {
++    server.handle_server_event(ServerEvent::ClientShellEndpointRequest {
++        client_id,
++        boot_id,
++        request: Box::new(api::schema::Request {
++            id: "desktop-test".into(),
++            method: api::schema::Method::ClientDesktopRegister(context(receiver)),
++        }),
++    });
++}
++
++#[test]
++fn desktop_registration_is_owned_by_actual_connection_including_inactive_endpoints() {
++    let mut server = test_headless_server();
++    let _a = add_client(&mut server, 1, true);
++    let _b = add_client(&mut server, 2, false);
++    let boot = server.client_shell_boot_id.clone();
++    register(&mut server, 1, boot.clone(), "mac");
++    register(&mut server, 2, boot, "iw");
++    assert_eq!(
++        server.desktop_routes.contexts.get(&1),
++        Some(&context("mac"))
++    );
++    assert_eq!(server.desktop_routes.contexts.get(&2), Some(&context("iw")));
++    server.remove_client(1);
++    assert!(!server.desktop_routes.contexts.contains_key(&1));
++    assert_eq!(server.desktop_routes.contexts.get(&2), Some(&context("iw")));
++}
++
++#[test]
++fn desktop_registration_from_old_boot_cannot_replace_current_context() {
++    let mut server = test_headless_server();
++    let _rx = add_client(&mut server, 1, true);
++    let boot = server.client_shell_boot_id.clone();
++    register(&mut server, 1, boot, "current");
++    register(&mut server, 1, "old-boot".into(), "stale");
++    assert_eq!(
++        server.desktop_routes.contexts.get(&1),
++        Some(&context("current"))
++    );
++    assert!(server.clients.contains_key(&1));
++    let boot = server.client_shell_boot_id.clone();
++    register(&mut server, 99, boot, "unknown");
++    assert!(!server.desktop_routes.contexts.contains_key(&99));
++}
++
++fn clipboard_fixture() -> (HeadlessServer, crate::layout::PaneId) {
++    let mut server = test_headless_server();
++    server.app.state.workspaces = vec![crate::workspace::Workspace::test_new("clipboard")];
++    server.app.state.ensure_test_terminals();
++    server.app.state.active = Some(0);
++    let pane = server.app.state.workspaces[0].tabs[0].layout.focused();
++    let public = server.app.public_pane_id(0, pane).unwrap();
++    server.desktop_routes.owners.insert(pane, (public, 1));
++    (server, pane)
++}
++
++fn copy(server: &mut HeadlessServer, pane_id: crate::layout::PaneId) {
++    server.handle_internal_event_with_forwarding(AppEvent::ClipboardWrite {
++        pane_id,
++        content: b"test".to_vec(),
++    });
++}
++
++fn copied(rx: &std::sync::mpsc::Receiver<Vec<u8>>) -> Vec<String> {
++    std::iter::from_fn(|| rx.recv_timeout(Duration::from_millis(100)).ok())
++        .filter_map(|data| match read_server_message(data) {
++            ServerMessage::Clipboard { data } => Some(data),
++            _ => None,
++        })
++        .collect()
++}
++
++#[test]
++fn clipboard_shared_active_pane_is_refused_then_works_after_disconnect() {
++    let (mut server, pane) = clipboard_fixture();
++    let a = add_client(&mut server, 1, true);
++    let b = add_client(&mut server, 2, true);
++    copy(&mut server, pane);
++    assert!(copied(&a).is_empty());
++    assert!(copied(&b).is_empty());
++    server.remove_client(2);
++    copy(&mut server, pane);
++    assert_eq!(copied(&a), ["dGVzdA=="]);
++}
++
++#[test]
++fn clipboard_inactive_saved_machine_endpoint_does_not_block_active_owner() {
++    let (mut server, pane) = clipboard_fixture();
++    let a = add_client(&mut server, 1, true);
++    let b = add_client(&mut server, 2, false);
++    copy(&mut server, pane);
++    assert_eq!(copied(&a), ["dGVzdA=="]);
++    assert!(copied(&b).is_empty());
++}
++
++#[test]
++fn clipboard_disconnected_owner_never_falls_back_to_remaining_viewer() {
++    let (mut server, pane) = clipboard_fixture();
++    let a = add_client(&mut server, 1, true);
++    let b = add_client(&mut server, 2, true);
++    server.remove_client(1);
++    copy(&mut server, pane);
++    assert!(copied(&a).is_empty());
++    assert!(copied(&b).is_empty());
++}
+diff --git a/src/server/headless/tests/mod.rs b/src/server/headless/tests/mod.rs
+index 3ab7ec0..fae5704 100644
+--- a/src/server/headless/tests/mod.rs
++++ b/src/server/headless/tests/mod.rs
+@@ -1,5 +1,6 @@
+ use super::*;
+ 
++mod desktop;
+ mod event_fairness;
+ mod native_graphics;
+ #[path = "pane_move.rs"]
+@@ -126,6 +127,7 @@ fn test_headless_server_with_event_hub(event_hub: api::EventHub) -> HeadlessServ
+         pending_alt_screen_reads: Vec::new(),
+         deferred_alt_screen_reads: Vec::new(),
+         next_activity_stamp: 1,
++        desktop_routes: Default::default(),
+         headless_size,
+         effective_size: headless_size,
+         shutting_down: false,
+@@ -4589,6 +4591,38 @@ fn terminal_control_rejects_attach_during_alt_screen_read() {
+     });
+ }
+ 
++#[test]
++fn direct_terminal_input_establishes_clipboard_owner() {
++    with_terminal_session_test_server(|server, terminal_id, _, public_pane_id| {
++        let control_rx = connect_pending_terminal_client_with_control_rx(server, 7);
++        server.handle_server_event(ServerEvent::ClientControlTerminal {
++            client_id: 7,
++            target: public_pane_id,
++            takeover: false,
++        });
++        server.handle_server_event(ServerEvent::ClientInput {
++            client_id: 7,
++            data: b"x".to_vec(),
++        });
++        let pane_id = server
++            .app
++            .terminal_runtimes
++            .get(&terminal_id)
++            .unwrap()
++            .pane_id();
++        assert_eq!(server.desktop_routes.clipboard_owner(pane_id), Some(7));
++        while control_rx.try_recv().is_ok() {}
++        server.handle_internal_event_with_forwarding(AppEvent::ClipboardWrite {
++            pane_id,
++            content: b"test".to_vec(),
++        });
++        match read_server_message(control_rx.recv_timeout(Duration::from_millis(100)).unwrap()) {
++            ServerMessage::Clipboard { data } => assert_eq!(data, "dGVzdA=="),
++            other => panic!("expected clipboard, got {other:?}"),
++        }
++    });
++}
++
+ #[test]
+ fn terminal_control_rejects_second_controller_without_takeover() {
+     with_terminal_session_test_server(|server, _terminal_id, terminal_id_string, _| {
+@@ -7084,7 +7118,7 @@ fn terminal_bell_targets_foreground_client_only() {
+ }
+ 
+ #[test]
+-fn clipboard_write_targets_foreground_client_only() {
++fn clipboard_write_targets_pane_input_owner_even_when_other_client_is_foreground() {
+     let mut server = test_headless_server();
+     let (background_tx, background_control_rx, _background_rx) = test_client_writer();
+     let (foreground_tx, foreground_control_rx, _foreground_rx) = test_client_writer();
+@@ -7109,10 +7143,15 @@ fn clipboard_write_targets_foreground_client_only() {
+             Some(foreground_tx),
+         ),
+     );
+-    server.foreground_client_id = Some(2);
++    server.foreground_client_id = Some(1);
++    server
++        .desktop_routes
++        .owners
++        .insert(crate::layout::PaneId::from_raw(500000), ("w1:p1".into(), 2));
+     server.sync_foreground_client_state();
+ 
+     let changed = server.handle_internal_event_with_forwarding(AppEvent::ClipboardWrite {
++        pane_id: crate::layout::PaneId::from_raw(500000),
+         content: b"test".to_vec(),
+     });
+ 
+@@ -7139,6 +7178,7 @@ fn clipboard_write_without_foreground_client_does_not_change_visual_state() {
+     server.foreground_client_id = None;
+ 
+     let changed = server.handle_internal_event_with_forwarding(AppEvent::ClipboardWrite {
++        pane_id: crate::layout::PaneId::from_raw(500000),
+         content: b"test".to_vec(),
+     });
+ 
+@@ -7163,8 +7203,13 @@ fn clipboard_write_failed_foreground_send_removes_client_without_visual_change()
+         ),
+     );
+     server.foreground_client_id = Some(1);
++    server
++        .desktop_routes
++        .owners
++        .insert(crate::layout::PaneId::from_raw(500000), ("w1:p1".into(), 1));
+ 
+     let changed = server.handle_internal_event_with_forwarding(AppEvent::ClipboardWrite {
++        pane_id: crate::layout::PaneId::from_raw(500000),
+         content: b"test".to_vec(),
+     });
+ 
+diff --git a/src/terminal/runtime.rs b/src/terminal/runtime.rs
+index 23b61da..120336e 100644
+--- a/src/terminal/runtime.rs
++++ b/src/terminal/runtime.rs
+@@ -17,6 +17,10 @@ use crate::layout::PaneId;
+ pub struct TerminalRuntime(crate::pane::PaneRuntime);
+ 
+ impl TerminalRuntime {
++    pub(crate) fn pane_id(&self) -> PaneId {
++        self.0.pane_id()
++    }
++
+     pub fn shutdown(self) {
+         self.0.shutdown();
+     }
+diff --git a/tests/machine_api.rs b/tests/machine_api.rs
+index a2a9a13..0b622e1 100644
+--- a/tests/machine_api.rs
++++ b/tests/machine_api.rs
+@@ -22,7 +22,7 @@ case "$last" in
+     '/bin/sh -c '*)
+         if [ "$TEST_MODE" = offline ]; then echo 'test remote connection failed' >&2; exit 255; fi
+         printf 'login banner\n'
+-        PATH="$TEST_ROOT/remote bin:/usr/bin:/bin" exec /bin/sh -c "$last" ;;
++        PATH="${TEST_REMOTE_PATH:-$TEST_ROOT/remote bin:/usr/bin:/bin}" exec /bin/sh -c "$last" ;;
+     '/bin/sh -s')
+         script=$(cat)
+         printf 'login banner\nherdr-remote-output-ready:1\n'
+@@ -361,6 +361,15 @@ fn machine_api_recovers_a_stale_path_before_sending_a_mutation() {
+     success(
+         harness
+             .command(&["--machine", "mac", "pane", "close", "w4:p1"])
++            // Discovery must find this fixture's replacement, even when the
++            // developer's machine also has a stable /usr/bin/herdr installed.
++            .env(
++                "TEST_REMOTE_PATH",
++                format!(
++                    "{}:/usr/bin:/bin",
++                    harness.root.join(".local/bin").display()
++                ),
++            )
+             .output()
+             .unwrap(),
+     );

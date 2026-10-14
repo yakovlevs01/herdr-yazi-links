@@ -22,7 +22,7 @@ class LauncherTests(unittest.TestCase):
         helper = '''#!/usr/bin/env python3
 import json, os, sys
 with open(os.environ['CALL_LOG'], 'a') as log:
-    log.write(json.dumps({'argv': [os.path.basename(sys.argv[0]), *sys.argv[1:]], 'session': os.environ.get('HERDR_SESSION'), 'socket': os.environ.get('HERDR_SOCKET_PATH'), 'pane': os.environ.get('HERDR_PANE_ID'), 'path': os.environ.get('PATH')}) + '\\n')
+    log.write(json.dumps({'argv': [os.path.basename(sys.argv[0]), *sys.argv[1:]], 'session': os.environ.get('HERDR_SESSION'), 'socket': os.environ.get('HERDR_SOCKET_PATH'), 'pane': os.environ.get('HERDR_PANE_ID'), 'path': os.environ.get('PATH'), 'receiver': os.environ.get('HERDR_DRAG_RECEIVER_ID')}) + '\\n')
 if os.path.basename(sys.argv[0]) == 'ssh':
     sys.exit(int(os.environ.get('SSH_EXIT', '0')))
 sys.exit(int(os.environ.get('HERDR_EXIT', '0')))
@@ -111,3 +111,29 @@ sys.exit(int(os.environ.get('HERDR_EXIT', '0')))
         self.env['HERDR_EXIT'] = '23'
         result, _ = self.run_launcher(['--unknown'])
         self.assertEqual(result.returncode, 23)
+
+    def test_each_ui_launch_gets_a_fresh_receiver_even_when_parent_had_one(self):
+        self.env['HERDR_DRAG_RECEIVER_ID'] = 'f' * 32
+        ids = []
+        for args in ([], [], ['--remote', 'host'], ['session', 'attach', 'work']):
+            result, calls = self.run_launcher(args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            receiver = calls[-1]['receiver']
+            self.assertRegex(receiver, r'^[0-9a-f]{32}$')
+            ids.append(receiver)
+        self.assertEqual(len(set(ids)), len(ids))
+        self.assertNotIn('f' * 32, ids)
+
+    def test_read_only_cli_does_not_create_a_receiver_identity(self):
+        for args in (['status'], ['pane', 'list'], ['--help'], ['--version']):
+            _, calls = self.run_launcher(args)
+            self.assertIsNone(calls[-1]['receiver'])
+
+    def test_explicit_session_attach_clears_the_inherited_pane_context(self):
+        self.env.update(HERDR_SOCKET_PATH='/tmp/old.sock', HERDR_ENV='1',
+                        HERDR_PANE_ID='w1:p1', HERDR_SESSION='old')
+        result, calls = self.run_launcher(['session', 'attach', 'new'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIsNone(calls[-1]['socket'])
+        self.assertIsNone(calls[-1]['pane'])
+        self.assertEqual(calls[-1]['argv'], ['herdr', 'session', 'attach', 'new'])
