@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-10-15)
+
+- Pin the optional patched build to Herdr 0.9.5, validated on Linux and macOS ARM64. The standalone plugin's minimum Herdr version remains 0.9.0.
+
+- Fix clipboard delivery from mouse-aware applications such as Codex when another client views the same pane. Mouse gestures select the recipient; passive pointer motion cannot steal it. Shared panes require recent input from one client and reject overlapping input.
+- Add real application-mouse/OSC 52 and client-selection regressions, including saved SSH machines. Make desktop clipboard probes and installer test fixtures portable to macOS.
 
 - Expand desktop routing regressions across API sockets, receiver generations, simultaneous requests, client reconnects, ordinary SSH and live handoff. The full nextest suite passes with isolated Git fixture signing.
 - Exclude inactive saved-machine endpoints from shared-pane clipboard ambiguity. Preserve desktop receiver ownership when explicitly attaching another session.
@@ -22,6 +27,8 @@
 - Rebase the plain-text file click patch onto Herdr 0.9.3. Resolve paths using the terminal byte offsets, including Unicode, and preserve OSC 8 and web-link priority.
 - Keep filesystem checks on click activation only; link hover remains free of filesystem access.
 - Build from source for this revision. Published v0.4.0 prebuilt downloads are unchanged; verified local build receipts prevent the installer from replacing a new build with them.
+
+Upgrade notes: rebuild with `./build.sh` to obtain the clipboard fix and Herdr 0.9.5. Published v0.4.0 prebuilt downloads are unchanged. Updating this checkout does not replace an installed binary or restart a running session.
 
 ## 0.5.0 (2026-09-24)
 

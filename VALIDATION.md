@@ -1,3 +1,36 @@
+# 0.6.0 release preparation, 2026-10-15
+
+- The user confirmed that selecting text on the saved Mac connection now copies successfully to the PC clipboard after the Mac deployment below.
+- Bump the plugin manifest from 0.5.0 to 0.6.0 and pin the optional build to the verified Herdr 0.9.5 revision. The PC's installed binary and running server remain 0.9.4.
+- Final release checks: all 132 Python tests passed; shell syntax, release metadata and `git diff --check` passed. The patch and Linux candidate hashes match the previously validated builds below. Log: `.build/release-0.6.0-python.log`.
+
+# Mac-only deployment, 2026-10-15
+
+- The user subsequently authorized updating **Mac only**. Installed the verified ARM64 0.9.5 candidate and matching patch, pin and build receipt on `my-mac-m1`.
+- Production live handoff completed. All **13 pane IDs, shell PIDs and foreground process group IDs** were preserved. Existing clients reconnected; no agent processes were restarted. The installed executable and running server report 0.9.5/protocol 22, with no stale server binary.
+- The PC client/server remain **0.9.4**. The PC's existing 0.9.4 executable passed the saved-Mac SSH mouse-selection and Yazi link smoke checks against the installed Mac 0.9.5 server. The Mac installation check passed all dependencies and the patched-build receipt.
+- Mac rollback files: `/Users/yakovlevs/pets/herdr-yazi-links/.build/before-clipboard-0.9.5/`. Mac process snapshots: `.build/clipboard-095-before.json` and `.build/clipboard-095-after.json`. Local logs: `.build/audit-mac-production-handoff.log` and `.build/audit-mac-post-install-095.log`.
+- Existing native Mac UI processes were allowed to reconnect without being forcibly closed; a newly launched client uses 0.9.5. The clipboard correction runs in the updated server and also works with the existing 0.9.4 clients.
+
+# Clipboard and 0.9.5 compatibility audit, 2026-10-15
+
+The following records the investigation before deployment. The later Mac deployment and user confirmation are recorded above.
+
+- Live PC and Mac clients/servers are still **0.9.4**, protocol 22. Installed SHA256 hashes match the final October 14 desktop-routing deployment below. The PC UI has a native Wayland environment; the persistent PC server still has old SSH variables, which the client routing deliberately ignores.
+- **132 Python tests passed.** The installed 0.9.4 desktop PTY suite passed A/B/A gestures, Enter routing, distinct image paste, ambiguous OSC 52 refusal, disconnect/reconnect and plain-SSH isolation.
+- Added `smoke.py --expect-selection-copy`: real SGR mouse drag selects `OSC_LINK`, a clipboard-tool recorder verifies the exact bytes and the writer's ancestry under the client process. Added `--saved-machine` using an isolated endpoint catalog. Production clipboard tools are not invoked by these smoke tests. The normal build now includes the local selection check.
+- Selection and file links passed on installed 0.9.4 in four configurations: local PC, PC client with direct SSH to Mac, PC client with saved Mac, and Mac client with saved PC. Only fresh UUID sessions were used. This did **not** reproduce the reported wrong-machine copy.
+- Saved-Mac Yazi Ctrl+G/SFTP checks passed for hovered files, multiselection, Unicode, quotes, newlines and duplicate basenames; remote originals remained unchanged. Artifact directory: `/tmp/herdr-drag-smoke-i3zq1d73`.
+- Separately tested real `/usr/bin/wl-copy` followed by `/usr/bin/wl-paste` with the live PC client's environment. A multiline Unicode marker round-tripped exactly, and the previous text was restored and verified. Clipboard contents were not logged. This checks the native backend separately, not mouse interaction in the user's existing Ghostty window.
+- Built upstream **0.9.5**, commit `2ecf19a92fc3a7fff75b6ce3655ef04f4625ec01`, with the existing patch unchanged. **247 selected Rust tests passed, one ignored.** Release build, local/SSH-context Yazi tests and the desktop PTY suite including live handoff passed. Additional real mouse-selection checks passed locally and against the existing Mac 0.9.4 server through a saved machine. This is Linux candidate validation, not a full Rust-suite run or a macOS 0.9.5 build.
+- Candidate: `.build/candidates/2ecf19a92fc3a7fff75b6ce3655ef04f4625ec01/bin/herdr`. The production pin, installed binaries, running servers and user panes were not replaced or restarted. Logs: `.build/audit-0.9.5*.log`, `.build/audit-2026-10-15-*.log`, `.build/audit-*-selection.log`, `.build/audit-native-clipboard.json`.
+- Initial selection checks above covered Herdr-owned selection. The user confirmed their failure persisted. Live Mac server logs at 08:31:28, 08:34:48 and 08:34:58 UTC recorded `OSC 52 ignored: pane has multiple active viewers` for runtime pane 3, the Codex pane `w2:p1`. A temporary wrapper observed no local `wl-copy` call during reproduction and was then removed. Codex owns mouse selection here and emits OSC 52; the October 14 patch rejected it because another client viewed the pane. Its input-owner tracking also excluded mouse gestures.
+- Added a failing-before/fixed-after Rust regression and a real two-client PTY probe that enables application mouse reporting and emits OSC 52 on mouse release. Mouse down/drag/up now establish the clipboard owner. Shared panes require an unambiguous input owner from the last five seconds; passive motion does not change it. Interleaved input remains blocked until that interval expires, and disconnected owners never fall back to another viewer.
+- Fixed 0.9.5 candidates passed the build's Python/Rust checks and all PTY checks on both Linux and macOS ARM64. macOS Python ran 132 tests with two platform skips. The full desktop suite now uses native-tool recorders for both platforms, including macOS PNG reads, without touching the real pasteboard. Installer test fixtures now normalize symlinked temporary paths and explicitly mock Linux for the mocked systemd installer test.
+- Isolated upgrades from the installed 0.9.4 to fixed 0.9.5 passed on both platforms, preserving pane IDs, shell PIDs and foreground process groups. The Linux fixed binary SHA256 is `8752ca7ebad7f06248b53e70eee8216ada36e5b286d9fba084d81a5e9b4c79ee`; Mac SHA256 is `cbddff6401c8f8cae506f32f28400f0f9ac28148738e4294cf19d301c5a77991`; patch SHA256 is `055fe7d908e4728146d966d36ec654091fb411483c1a7f19be0988bd944add57`. Mac candidate: `.build/clipboard-0.9.5/.build/bin/herdr`. Logs on each host include `.build/audit-fixed-0.9.5.log` and `.build/audit-handoff-094-095-{linux,mac}.log`.
+- **Deployment declined by the user for now.** Leave the change in code and staged builds only. Production PC/Mac servers and clients remain 0.9.4; the live clipboard failure remains until a separately authorized deployment. The temporary diagnostic wrapper was removed. No commits or pushes were made.
+- Separate remaining limitation: Herdr-owned `SelectionCopy` shows success feedback before `write_osc52_bytes` runs, and the dispatcher ignores its boolean result. Upstream 0.9.5 leaves this code unchanged. Application-owned selection can also display its own success message without knowing whether the server forwarded OSC 52.
+
 # Expanded desktop regressions, 2026-10-14
 
 This completes the test follow-up to the client routing rollout below.

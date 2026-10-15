@@ -1414,14 +1414,14 @@ index cb2c619..b8d5d76 100644
              AltScreenReadConflict::Frozen(snapshot) => Some(snapshot),
 diff --git a/src/server/headless/desktop_routing.rs b/src/server/headless/desktop_routing.rs
 new file mode 100644
-index 0000000..141c212
+index 0000000..16264d8
 --- /dev/null
 +++ b/src/server/headless/desktop_routing.rs
-@@ -0,0 +1,307 @@
+@@ -0,0 +1,334 @@
 +//! Desktop operations have a connection owner, never a session-wide destination.
 +use crate::api::schema::DesktopClientContext;
 +use crate::layout::PaneId;
-+use crate::protocol::{ClientKeyCode, ClientKeyKind, ClientPaneInputEvent};
++use crate::protocol::{ClientKeyCode, ClientKeyKind, ClientMouseKind, ClientPaneInputEvent};
 +use std::collections::HashMap;
 +use std::time::{Duration, Instant};
 +
@@ -1432,6 +1432,7 @@ index 0000000..141c212
 +    pub contexts: HashMap<u64, DesktopClientContext>,
 +    pending: HashMap<(String, String), (Option<u64>, Instant)>,
 +    pub owners: HashMap<PaneId, (String, u64)>,
++    clipboard_intents: HashMap<PaneId, (Option<u64>, Instant)>,
 +}
 +
 +impl DesktopRoutes {
@@ -1451,8 +1452,26 @@ index 0000000..141c212
 +                    ..
 +                } | ClientPaneInputEvent::TextCommit(_)
 +                    | ClientPaneInputEvent::Paste(_)
++                    | ClientPaneInputEvent::Mouse {
++                        kind: ClientMouseKind::Down(_)
++                            | ClientMouseKind::Drag(_)
++                            | ClientMouseKind::Up(_),
++                        ..
++                    }
 +            ) {
 +                self.owners.insert(runtime, (pane.to_owned(), client));
++                // OSC 52 carries no input nonce. Passive viewers do not create
++                // ambiguity, but interleaved gestures from different clients do.
++                let owner = match self.clipboard_intents.get(&runtime) {
++                    Some((previous, when))
++                        if *previous != Some(client)
++                            && now.saturating_duration_since(*when) < REQUEST_TTL =>
++                    {
++                        None
++                    }
++                    _ => Some(client),
++                };
++                self.clipboard_intents.insert(runtime, (owner, now));
 +            }
 +            let action = match event {
 +                ClientPaneInputEvent::Key {
@@ -1507,6 +1526,14 @@ index 0000000..141c212
 +
 +    pub fn clipboard_owner(&self, pane: PaneId) -> Option<u64> {
 +        self.owners.get(&pane).map(|(_, client)| *client)
++    }
++
++    pub fn shared_clipboard_owner(&self, pane: PaneId, now: Instant) -> Option<u64> {
++        self.clipboard_intents.get(&pane).and_then(|(owner, when)| {
++            (now.saturating_duration_since(*when) < REQUEST_TTL)
++                .then_some(*owner)
++                .flatten()
++        })
 +    }
 +}
 +
@@ -1751,10 +1778,10 @@ index 6d2dd6b..22d4e5e 100644
          if let api::schema::Method::ClientShellSurfaceSet(params) = &request.method {
              let Some((changed, projection_revision)) =
 diff --git a/src/server/headless/notifications.rs b/src/server/headless/notifications.rs
-index 1025acb..8ce81b5 100644
+index 1025acb..6df0a81 100644
 --- a/src/server/headless/notifications.rs
 +++ b/src/server/headless/notifications.rs
-@@ -331,11 +331,33 @@ impl HeadlessServer {
+@@ -331,11 +331,40 @@ impl HeadlessServer {
                  }
                  false
              }
@@ -1762,8 +1789,8 @@ index 1025acb..8ce81b5 100644
 -                // Clipboard writes are client-local side effects. Forward them only to
 -                // the foreground client instead of broadcasting to every attached client.
 +            AppEvent::ClipboardWrite { pane_id, content } => {
-+                // OSC 52 has no request id. Route only to the input owner of this
-+                // pane, and refuse when the pane is shared by multiple active viewers.
++                // Shared viewers are fine when one client recently supplied the
++                // input. Refuse stale or overlapping gestures, not passive viewing.
                  let data = base64::engine::general_purpose::STANDARD.encode(content.as_slice());
 -                self.send_to_foreground_client(ServerMessage::Clipboard { data });
 +                let owner = self.desktop_routes.clipboard_owner(*pane_id);
@@ -1782,17 +1809,24 @@ index 1025acb..8ce81b5 100644
 +                            .count()
 +                            > 1
 +                    });
-+                if !shared {
-+                    if let Some(client_id) = owner {
-+                        self.send_to_client(client_id, ServerMessage::Clipboard { data });
-+                    }
++                let owner = if shared {
++                    self.desktop_routes
++                        .shared_clipboard_owner(*pane_id, std::time::Instant::now())
 +                } else {
-+                    warn!(pane = pane_id.raw(), "OSC 52 ignored: pane has multiple active viewers; copy using client selection");
++                    owner
++                };
++                if let Some(client_id) = owner {
++                    self.send_to_client(client_id, ServerMessage::Clipboard { data });
++                } else if shared {
++                    warn!(
++                        pane = pane_id.raw(),
++                        "OSC 52 ignored: shared pane has no recent unambiguous input owner"
++                    );
 +                }
                  false
              }
              AppEvent::StateChanged { pane_id, agent, .. } => {
-@@ -704,7 +726,7 @@ impl HeadlessServer {
+@@ -704,7 +733,7 @@ impl HeadlessServer {
      ///
      /// The server has no host terminal or audio subsystem, so we:
      /// - Forward `ClipboardWrite` as `ServerMessage::Clipboard` to the
@@ -1803,11 +1837,13 @@ index 1025acb..8ce81b5 100644
      /// - Detect when a toast is set on AppState and forward as
 diff --git a/src/server/headless/tests/desktop.rs b/src/server/headless/tests/desktop.rs
 new file mode 100644
-index 0000000..bf4dd6e
+index 0000000..0932d73
 --- /dev/null
 +++ b/src/server/headless/tests/desktop.rs
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,202 @@
 +use super::*;
++use crate::protocol::ClientPaneInputEvent;
++use std::time::Instant;
 +
 +fn add_client(
 +    server: &mut HeadlessServer,
@@ -1940,6 +1976,69 @@ index 0000000..bf4dd6e
 +    let a = add_client(&mut server, 1, true);
 +    let b = add_client(&mut server, 2, true);
 +    server.remove_client(1);
++    copy(&mut server, pane);
++    assert!(copied(&a).is_empty());
++    assert!(copied(&b).is_empty());
++}
++
++fn mouse_event(kind: crate::protocol::ClientMouseKind) -> ClientPaneInputEvent {
++    ClientPaneInputEvent::Mouse {
++        kind,
++        position: crate::protocol::ClientMousePosition::Cell { column: 3, row: 2 },
++        geometry: None,
++        modifiers: 0,
++        lines: 3,
++    }
++}
++
++#[test]
++fn clipboard_mouse_selection_targets_input_client_with_another_active_viewer() {
++    use crate::protocol::{ClientMouseButton::Left, ClientMouseKind::*};
++    let (mut server, pane) = clipboard_fixture();
++    let a = add_client(&mut server, 1, true);
++    let b = add_client(&mut server, 2, true);
++    let public = server.app.public_pane_id(0, pane).unwrap();
++    // Client 1 last typed here. Client 2 now selects inside a mouse-aware app.
++    for kind in [Down(Left), Drag(Left), Up(Left)] {
++        server
++            .desktop_routes
++            .note_input(&public, pane, 2, &[mouse_event(kind)], Instant::now());
++    }
++    // Passive movement from the old viewer must not steal the clipboard.
++    server
++        .desktop_routes
++        .note_input(&public, pane, 1, &[mouse_event(Moved)], Instant::now());
++    copy(&mut server, pane);
++    assert!(copied(&a).is_empty());
++    assert_eq!(copied(&b), ["dGVzdA=="]);
++}
++
++#[test]
++fn clipboard_shared_viewers_reject_stale_or_competing_gestures() {
++    use crate::protocol::{ClientMouseButton::Left, ClientMouseKind::*};
++    let (mut server, pane) = clipboard_fixture();
++    let a = add_client(&mut server, 1, true);
++    let b = add_client(&mut server, 2, true);
++    let public = server.app.public_pane_id(0, pane).unwrap();
++    server.desktop_routes.note_input(
++        &public,
++        pane,
++        1,
++        &[mouse_event(Up(Left))],
++        Instant::now() - Duration::from_secs(6),
++    );
++    copy(&mut server, pane);
++    assert!(copied(&a).is_empty());
++    assert!(copied(&b).is_empty());
++    for client in [1, 2, 2] {
++        server.desktop_routes.note_input(
++            &public,
++            pane,
++            client,
++            &[mouse_event(Up(Left))],
++            Instant::now(),
++        );
++    }
 +    copy(&mut server, pane);
 +    assert!(copied(&a).is_empty());
 +    assert!(copied(&b).is_empty());

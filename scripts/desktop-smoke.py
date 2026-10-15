@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Two real clients share one Yazi and stale-SSH server; no user's clipboard touched."""
 
-import argparse, zlib, fcntl, json, os, pathlib, pty, shlex, socket, struct, subprocess, tempfile, termios, threading, time, uuid
+import argparse, zlib, fcntl, json, os, pathlib, pty, shlex, socket, struct, subprocess, sys, tempfile, termios, threading, time, uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -22,7 +22,7 @@ def main():
     parser.add_argument("--handoff-to", type=pathlib.Path)
     args = parser.parse_args()
     binary = str(args.herdr.resolve())
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="herdr-desktop-smoke-"))
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="herdr-desktop-smoke-", dir="/tmp" if sys.platform == "darwin" else None))
     print("Artifacts:", tmp, flush=True)
     session = "desktop-" + uuid.uuid4().hex[:12]
     env = {k: v for k, v in os.environ.items() if not k.startswith(("HERDR_", "SSH_"))}
@@ -86,6 +86,17 @@ def main():
         + ',"a") as f: f.write(json.dumps([os.getenv("DISPLAY"),sys.stdin.read()])+"\\n")\n'
     )
     (bindir / "wl-copy").chmod(0o755)
+    (bindir / "pbcopy").symlink_to("wl-copy")
+    # The macOS backend asks osascript to save a PNG to a temporary file.
+    # Supply fixture pixels there without accessing the real pasteboard.
+    (bindir / "osascript").write_text(
+        "#!/usr/bin/env python3\nimport os,sys,re,pathlib\n"
+        + 'path=re.search(r\'POSIX file "([^"]+)"\',sys.argv[-1])\n'
+        + 'if path is None: sys.exit(1)\n'
+        + "with open(" + repr(str(reads)) + ',"a") as f: f.write(os.environ["DISPLAY"]+"\\n")\n'
+        + 'pathlib.Path(path[1]).write_bytes(' + repr(pngs) + '[os.environ["DISPLAY"]])\n'
+    )
+    (bindir / "osascript").chmod(0o755)
     env["PATH"] = str(bindir) + ":" + env["PATH"]
     yc = tmp / "config/yazi"
     (yc / "plugins/herdr-drag.yazi").mkdir(parents=True)
@@ -309,6 +320,45 @@ def main():
             "PASS reconnect uses a new desktop for image paste and text copy",
             flush=True,
         )
+
+        # Codex and other mouse-aware apps own selection and emit OSC 52.
+        # Two viewers must not block the client that actually released the mouse.
+        mouse_probe = tmp / "mouse-probe.py"
+        mouse_probe.write_text(
+            'import os,re,sys,tty,termios\n'
+            'old=termios.tcgetattr(0)\ntty.setraw(0)\n'
+            'try:\n'
+            ' print("\\x1b[?1000h\\x1b[?1002h\\x1b[?1006hMOUSE_COPY_READY",flush=True)\n'
+            ' buf=b""\n'
+            ' while True:\n'
+            '  chunk=os.read(0,4096)\n'
+            '  if b"\\x03" in chunk or b"\\x04" in chunk: break\n'
+            '  buf+=chunk\n'
+            '  while (m:=re.search(rb"\\x1b\\[<\\d+;\\d+;\\d+([Mm])",buf)):\n'
+            '   if m[1]==b"m": print("\\x1b]52;c;dGVzdA==\\x07",end="",flush=True)\n'
+            '   buf=buf[m.end():]\n'
+            'finally:\n termios.tcsetattr(0,termios.TCSANOW,old)\n'
+            ' print("\\x1b[?1000l\\x1b[?1002l\\x1b[?1006l",end="",flush=True)\n'
+        )
+        os.write(cm, b"\x04")
+        time.sleep(0.3)
+        api("pane.send_input", {"pane_id": pane,
+            "text": shlex.join(["python3", str(mouse_probe)]), "keys": ["enter"]})
+        until(lambda: "MOUSE_COPY_READY" in screen(), "mouse-aware clipboard app")
+        d, dm = client(":d")
+        time.sleep(5.2)
+        for index, (master, display, passive) in enumerate([(cm, ":c", dm), (dm, ":d", cm)], 3):
+            os.write(master, b"\x1b[<0;40;4M\x1b[<32;45;4M")
+            os.write(passive, b"\x1b[<35;50;4M")
+            os.write(master, b"\x1b[<0;45;4m")
+            until(lambda: len(clipboard_log.read_text().splitlines()) == index,
+                  "shared mouse-selection clipboard")
+            assert json.loads(clipboard_log.read_text().splitlines()[-1]) == [display, "test"]
+            if index == 3:
+                time.sleep(5.2)
+        d.terminate()
+        d.wait(timeout=5)
+        print("PASS mouse-aware app copies to selecting client with another active viewer; passive motion cannot steal it", flush=True)
 
         ssh, ssh_master = client(
             ":ssh", SSH_CONNECTION="ssh-only", HERDR_DRAG_RECEIVER_ID="f" * 32

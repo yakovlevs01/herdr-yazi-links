@@ -85,6 +85,7 @@ class ManagedServerTests(unittest.TestCase):
             (home / '.local/bin/herdr').write_text('existing executable')
             (home / '.zshenv').write_text('# existing config\n')
             with patch.object(installer, 'ROOT', home), patch.object(Path, 'home', return_value=home), \
+                 patch.object(installer.sys, 'platform', 'linux'), \
                  patch.dict(os.environ, {'SHELL': '/bin/zsh'}), patch.object(installer.subprocess, 'run') as run:
                 installer.install()
                 installer.install()

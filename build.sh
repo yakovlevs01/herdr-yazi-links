@@ -42,7 +42,7 @@ cargo +"$toolchain" test --locked --bin herdr desktop
 cargo +"$toolchain" test --locked --bin herdr clipboard -- --test-threads=1
 cargo +"$toolchain" test --locked --bin herdr generated_protocol_schema_artifact_is_current
 cargo +"$toolchain" build --locked --release
-python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-home-paths --plugin "$plugin_dir"
+python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-home-paths --expect-selection-copy --plugin "$plugin_dir"
 python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-home-paths --expect-client-context local --plugin "$plugin_dir"
 python3 "$plugin_dir/scripts/smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --expect-paths --expect-client-context ssh --plugin "$plugin_dir"
 python3 "$plugin_dir/scripts/desktop-smoke.py" --herdr "$CARGO_TARGET_DIR/release/herdr" --handoff-to "$CARGO_TARGET_DIR/release/herdr"

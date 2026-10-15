@@ -27,7 +27,7 @@ class MachineInstallerTests(unittest.TestCase):
             with patch.object(INSTALL.Path, 'home', return_value=root):
                 INSTALL.configure_patched_entry(root)
                 INSTALL.configure_patched_entry(root)
-            self.assertEqual(entry.resolve(), root / 'scripts/herdr-entry.py')
+            self.assertEqual(entry.resolve(), (root / 'scripts/herdr-entry.py').resolve())
             backups = list(entry.parent.glob('herdr.herdr-yazi-backup-*'))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_text(), 'previous binary')
@@ -41,12 +41,12 @@ class MachineInstallerTests(unittest.TestCase):
             with patch.object(INSTALL.Path, 'home', return_value=home):
                 INSTALL.configure_checkout(root)
                 INSTALL.configure_checkout(root)
-                self.assertEqual((home / 'pets/herdr-yazi-links').resolve(), root)
+                self.assertEqual((home / 'pets/herdr-yazi-links').resolve(), root.resolve())
                 another = home / 'another'
                 another.mkdir()
                 with self.assertRaisesRegex(ValueError, 'Another checkout'):
                     INSTALL.configure_checkout(another)
-            self.assertEqual((home / 'pets/herdr-yazi-links').resolve(), root)
+            self.assertEqual((home / 'pets/herdr-yazi-links').resolve(), root.resolve())
 
     def test_yazi_compatibility_rejects_old_and_future_api(self):
         with patch.object(INSTALL.shutil, 'which', return_value='/bin/yazi'):
@@ -140,7 +140,7 @@ class MachineInstallerTests(unittest.TestCase):
             target.write_text('target')
             INSTALL.link(launcher, target)
             INSTALL.link(launcher, target)
-            self.assertEqual(launcher.resolve(), target)
+            self.assertEqual(launcher.resolve(), target.resolve())
             backups = list(root.glob('launcher.herdr-yazi-backup-*'))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_text(), 'user file')

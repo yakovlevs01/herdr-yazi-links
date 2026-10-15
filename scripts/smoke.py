@@ -42,8 +42,14 @@ def main():
     parser.add_argument('--plugin', type=Path, default=ROOT)
     parser.add_argument('--remote', help='SSH host with the plugin and patched Herdr installed')
     parser.add_argument('--remote-root', help='Absolute plugin checkout path on the SSH host')
+    parser.add_argument('--expect-selection-copy', action='store_true',
+                        help='Select text with real mouse input and require a client-local clipboard write')
+    parser.add_argument('--saved-machine', action='store_true',
+                        help='Exercise the remote through an isolated saved-machine profile')
     parser.add_argument('--client-arg', action='append', default=[], help='Extra client argument, repeatable; use --client-arg=--flag')
     args = parser.parse_args()
+    if args.saved_machine and not args.remote:
+        parser.error('--saved-machine requires --remote')
     if args.handoff_to and args.remote:
         parser.error('--handoff-to currently requires a local test')
     if args.expect_home_paths and args.remote:
@@ -78,6 +84,22 @@ def main():
             env['HOME'] = str(tmp)
         target = fixture / 'smoke-target.txt'
         target.write_text('Yazi file link smoke test\n')
+        clipboard_log = tmp / 'clipboard.jsonl'
+        if args.expect_selection_copy:
+            # Native tools are recorders: never replace the user's real clipboard.
+            bindir = tmp / 'bin'
+            bindir.mkdir()
+            recorder = ('#!' + sys.executable + '\nimport json,os,sys\n'
+                        + 'with open(' + repr(str(clipboard_log)) + ', "a") as f:\n'
+                        + ' f.write(json.dumps({"parent":os.getppid(),"text":sys.stdin.read()})+"\\n")\n')
+            for name in ('wl-copy', 'xclip', 'xsel', 'pbcopy'):
+                tool = bindir / name
+                tool.write_text(recorder)
+                tool.chmod(0o755)
+            for key in list(env):
+                if key.startswith('SSH_') or key in ('VSCODE_IPC_HOOK_CLI', 'WSL_DISTRO_NAME', 'WSL_INTEROP'):
+                    env.pop(key)
+            env.update(PATH=str(bindir) + ':' + env['PATH'], WAYLAND_DISPLAY='selection-test')
         desktop_keys = ('DISPLAY', 'WAYLAND_DISPLAY', 'XAUTHORITY', 'XDG_RUNTIME_DIR',
                         'DBUS_SESSION_BUS_ADDRESS', 'XDG_CURRENT_DESKTOP', 'XDG_SESSION_TYPE')
         opener_output = tmp / 'opener-env.json'
@@ -146,7 +168,18 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
             tunnel = subprocess.Popen(remote_control[:-1] + ['-o', 'ExitOnForwardFailure=yes', '-N',
                 '-L', str(sockpath) + ':' + info['socket'], args.remote], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             until(lambda: sockpath.exists() or (tunnel.poll() is not None and (_ for _ in ()).throw(RuntimeError('SSH forwarding failed'))), 'SSH socket forward')
-            cli += ['--remote', args.remote]
+            if args.saved_machine:
+                profile = uuid.uuid4().hex
+                catalog = tmp / 'state/herdr/client'
+                catalog.mkdir(parents=True)
+                (catalog / 'endpoints.json').write_text(json.dumps({
+                    'version': 1, 'selected_profile': profile, 'ssh': [{
+                        'id': profile, 'label': 'Selection test', 'target': args.remote,
+                        'session': session, 'enabled': True}]}))
+                (catalog / 'endpoint-selection.json').write_text(json.dumps({
+                    'version': 1, 'selected_profile': profile}))
+            else:
+                cli += ['--remote', args.remote]
         else:
             subprocess.run(cli + ['plugin', 'link', str(args.plugin.resolve())], env=env, check=True,
                            stdout=subprocess.DEVNULL, timeout=15)
@@ -234,6 +267,24 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
                 print('PASS live handoff preserves pane and process IDs; new client reconnects', flush=True)
             os.write(master, b'\x1b[I')
             time.sleep(0.3)
+            if args.expect_selection_copy:
+                # The configured sidebar occupies 26 columns; pane starts at 27.
+                # Select OSC_LINK by dragging, without Control/link activation.
+                os.write(master, b'\x1b[<0;27;2M\x1b[<32;34;2M\x1b[<0;34;2m')
+                until(lambda: clipboard_log.exists() and clipboard_log.read_text().endswith('\n'),
+                      'client-local selection clipboard write')
+                copies = [json.loads(line) for line in clipboard_log.read_text().splitlines()]
+                # --remote launches a child client after setting up SSH. Saved
+                # machines run the client in the original process.
+                writer = copies[-1]['parent']
+                ancestry = set()
+                while writer > 1 and writer not in ancestry and writer != client.pid:
+                    ancestry.add(writer)
+                    parent = subprocess.check_output(['ps', '-p', str(writer), '-o', 'ppid='], text=True).strip()
+                    writer = int(parent) if parent else 0
+                if writer != client.pid or copies[-1]['text'] != 'OSC_LINK':
+                    raise RuntimeError('Selection copied by wrong process or wrong text: ' + repr(copies))
+                print('PASS mouse selection copies remote/local text in the client process', flush=True)
             cases = [('osc', 'OSC_LINK', True),
                      ('relative', target.name, args.expect_paths),
                      ('absolute', str(target), args.expect_paths)]
@@ -288,6 +339,12 @@ print(json.dumps({'tmp': str(tmp), 'socket': str(sockets[0])}))
             # Only our UUID-named server, with isolated configuration; never the user's session.
             try:
                 if args.remote:
+                    if args.saved_machine:
+                        # Stop our client first so it cannot restart its test endpoint.
+                        client.terminate()
+                        client.wait(timeout=5)
+                        subprocess.run(cli + ['server', 'stop'], env=env, check=True,
+                                       timeout=10, stdout=subprocess.DEVNULL)
                     cleanup = 'import pathlib, shutil, subprocess, sys; root, session, tmp = sys.argv[1:]; subprocess.run([str(pathlib.Path(root)/".build/bin/herdr"), "--session", session, "server", "stop"], check=True); shutil.rmtree(tmp)'
                     subprocess.run(remote_control + [shlex.join(['python3', '-c', cleanup, args.remote_root, session, remote_tmp])], check=True, timeout=20, stdout=subprocess.DEVNULL)
                 else:
